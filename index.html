@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>小舟</title>
+    <script>
+      // 启动阶段的兜底：任何未捕获错误直接画到页面上。
+      // 透明窗口如果崩了就是一片空白，根本看不出问题在哪。
+      (function () {
+        function show(title, detail) {
+          if (document.getElementById("boot-error")) return;
+          var box = document.createElement("pre");
+          box.id = "boot-error";
+          box.style.cssText =
+            "position:fixed;inset:0;margin:0;padding:26px;z-index:99999;" +
+            "font:12px/1.6 Consolas,monospace;color:#b63035;background:#fff;" +
+            "white-space:pre-wrap;word-break:break-word;overflow:auto";
+          box.textContent = title + "\n\n" + detail;
+          document.body.appendChild(box);
+        }
+        window.addEventListener("error", function (event) {
+          show(
+            "页面脚本出错",
+            (event.error && event.error.stack) || event.message || String(event)
+          );
+        });
+        window.addEventListener("unhandledrejection", function (event) {
+          var reason = event.reason;
+          show("有一个 Promise 抛错", (reason && reason.stack) || String(reason));
+        });
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

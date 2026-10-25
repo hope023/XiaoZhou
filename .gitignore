@@ -1,0 +1,15 @@
+node_modules
+dist
+src-tauri/target
+src-tauri/gen
+*.log
+.DS_Store
+.shot.png
+.preview.png
+
+# 运行时与测试产物
+.testdata/
+.testrun/
+.tools/
+.workbuddy/
+.xiaozhou/

@@ -1,0 +1,50 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "小舟",
+  "version": "0.1.0",
+  "identifier": "com.hope02.xiaozhou",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://127.0.0.1:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "小舟",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 880,
+        "minHeight": 580,
+        "center": true,
+        "resizable": true,
+        "visible": true,
+        "decorations": false,
+        "dragDropEnabled": true,
+        "additionalBrowserArgs": "--no-sandbox --disable-gpu --disable-features=RendererCodeIntegrity"
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": ["SimpChinese"]
+      }
+    }
+  }
+}
