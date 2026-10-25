@@ -16,6 +16,11 @@ interface Props {
   images: string[];
   onAddImage: (dataUrl: string) => void;
   onRemoveImage: (index: number) => void;
+  /** 当前模型与常用列表，右下角快速切换 */
+  model: string;
+  models: string[];
+  onSelectModel: (model: string) => void;
+  onManageModels: () => void;
 }
 
 /** 读文件为 data URL，超过 8MB 的图片拒收，避免请求体爆炸 */
@@ -45,9 +50,16 @@ export function Composer({
   images,
   onAddImage,
   onRemoveImage,
+  model,
+  models,
+  onSelectModel,
+  onManageModels,
 }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // 模型快速切换菜单
+  const [modelMenu, setModelMenu] = useState(false);
 
   // @ 引用弹层
   const [mention, setMention] = useState<{
@@ -57,6 +69,16 @@ export function Composer({
     active: number;
   } | null>(null);
   const mentionTimer = useRef<number | null>(null);
+
+  // 模型菜单：点外面就关
+  useEffect(() => {
+    if (!modelMenu) return;
+    const close = (event: MouseEvent) => {
+      if (!(event.target as HTMLElement).closest(".model-wrap")) setModelMenu(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [modelMenu]);
 
   // 高度跟着内容走，最多 6 行
   useEffect(() => {
@@ -223,6 +245,62 @@ export function Composer({
           <div className="composer-chips">{children}</div>
 
           <div className="composer-right">
+            <div className="model-wrap">
+              <button
+                className="chip model-chip"
+                onClick={() => setModelMenu((v) => !v)}
+                title={`${model}（点击切换模型）`}
+                type="button"
+              >
+                <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+                  <path
+                    d="M8 2l5 2.9v6.2L8 14 3 11.1V4.9L8 2Z"
+                    stroke="currentColor"
+                    strokeWidth="1.1"
+                    fill="none"
+                    strokeLinejoin="round"
+                  />
+                  <path d="M8 8l5-2.9M8 8v6M8 8L3 5.1" stroke="currentColor" strokeWidth="1.1" fill="none" />
+                </svg>
+                <span className="chip-text">{model || "未配置模型"}</span>
+              </button>
+
+              {modelMenu && (
+                <div className="model-menu">
+                  <div className="model-menu-title">切换模型</div>
+                  {models.length === 0 && (
+                    <div className="mention-empty">
+                      还没有常用模型，点「管理模型」把常用的加进去
+                    </div>
+                  )}
+                  {models.map((item) => (
+                    <button
+                      key={item}
+                      className="model-menu-item"
+                      onClick={() => {
+                        onSelectModel(item);
+                        setModelMenu(false);
+                      }}
+                      type="button"
+                    >
+                      <span className="model-menu-name">{item}</span>
+                      {item === model && <span className="model-check">✓ 当前</span>}
+                    </button>
+                  ))}
+                  <button
+                    className="model-menu-item model-manage"
+                    onClick={() => {
+                      setModelMenu(false);
+                      onManageModels();
+                    }}
+                    type="button"
+                  >
+                    管理模型…
+                  </button>
+                </div>
+              )}
+            </div>
+
             <input
               ref={fileRef}
               type="file"

@@ -9,8 +9,8 @@ interface Props {
   settings: Settings;
   schedules: Schedule[];
   onSchedulesChange: (next: Schedule[]) => void;
-  /** 打开时滚动到定时任务区 */
-  focusSchedules?: boolean;
+  /** 打开时直接落到某个页签（如从侧栏定时任务、模型切换菜单进来） */
+  initialTab?: "general" | "model" | "schedule";
   onSave: (settings: Settings) => void;
   onClose: () => void;
 }
@@ -27,12 +27,12 @@ const PRESETS = [
   { label: "OpenAI", baseUrl: "https://api.openai.com", model: "gpt-4o-mini" },
 ];
 
-export function SettingsPanel({ settings, schedules, onSchedulesChange, focusSchedules, onSave, onClose }: Props) {
+export function SettingsPanel({ settings, schedules, onSchedulesChange, initialTab, onSave, onClose }: Props) {
   const [draft, setDraft] = useState<Settings>(settings);
   const [showKey, setShowKey] = useState(false);
   const [workspaceOk, setWorkspaceOk] = useState<boolean | null>(null);
   const [tab, setTab] = useState<"general" | "model" | "schedule">(
-    focusSchedules ? "schedule" : "general"
+    initialTab ?? "general"
   );
 
   const patch = (part: Partial<Settings>) => setDraft((prev) => ({ ...prev, ...part }));
@@ -245,12 +245,46 @@ export function SettingsPanel({ settings, schedules, onSchedulesChange, focusSch
 
             <div className="field">
               <label>模型</label>
-              <input
-                value={draft.model}
-                onChange={(event) => patch({ model: event.target.value })}
-                placeholder="deepseek-chat"
-                spellCheck={false}
-              />
+              <div className="input-with-action">
+                <input
+                  value={draft.model}
+                  onChange={(event) => patch({ model: event.target.value })}
+                  placeholder="deepseek-chat"
+                  spellCheck={false}
+                />
+                <button
+                  className="ghost-btn"
+                  disabled={!draft.model.trim() || draft.modelList.includes(draft.model.trim())}
+                  onClick={() => patch({ modelList: [...draft.modelList, draft.model.trim()] })}
+                  title="加入常用模型列表，输入框右下角可以快速切换"
+                >
+                  ＋ 存为常用
+                </button>
+              </div>
+              {draft.modelList.length > 0 && (
+                <div className="model-list">
+                  {draft.modelList.map((item) => (
+                    <span
+                      key={item}
+                      className={`model-tag ${item === draft.model ? "active" : ""}`}
+                      onClick={() => patch({ model: item })}
+                      title={item === draft.model ? "当前模型" : "点击切换到这个模型"}
+                    >
+                      {item}
+                      <button
+                        className="model-tag-del"
+                        title="从常用列表移除"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          patch({ modelList: draft.modelList.filter((x) => x !== item) });
+                        }}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="field">

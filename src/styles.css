@@ -2110,3 +2110,140 @@ button {
   border-radius: 2px 2px 0 0;
   background: var(--accent);
 }
+
+/* ---------------- 模型快速切换 ---------------- */
+
+.model-wrap {
+  position: relative;
+  flex: none;
+  min-width: 0;
+}
+
+.chip.model-chip {
+  max-width: 180px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  font-size: 11.3px;
+  padding: 4px 9px;
+}
+
+.chip.model-chip:hover {
+  background: var(--accent-soft);
+  filter: brightness(0.96);
+}
+
+.model-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  width: 280px;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  box-shadow: var(--shadow);
+  padding: 5px;
+  z-index: 80;
+  animation: pop-in 0.15s ease;
+}
+
+.model-menu-title {
+  font-size: 10.8px;
+  color: var(--text-faint);
+  padding: 6px 10px 4px;
+}
+
+.model-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 12.2px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.model-menu-item:hover {
+  background: var(--bg-soft);
+  color: var(--text);
+}
+
+.model-menu-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 11.6px;
+}
+
+.model-check {
+  flex: none;
+  font-size: 10.5px;
+  color: var(--accent);
+}
+
+.model-menu-item.model-manage {
+  color: var(--text-faint);
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 8px 8px;
+  margin-top: 3px;
+  padding-top: 8px;
+}
+
+.model-menu-item.model-manage:hover {
+  color: var(--accent);
+}
+
+/* ---------------- 设置里的常用模型标签 ---------------- */
+
+.model-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 7px;
+}
+
+.model-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.4px;
+  font-family: var(--mono);
+  color: var(--text-dim);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 3px 9px;
+  cursor: pointer;
+  transition: border-color 0.12s, color 0.12s;
+}
+
+.model-tag:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.model-tag.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.model-tag-del {
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 12px;
+  line-height: 1;
+  padding: 0 1px;
+}
+
+.model-tag-del:hover {
+  color: #dc2626;
+}

@@ -9,6 +9,7 @@ export const DEFAULT_SETTINGS: Settings = {
   baseUrl: "https://api.deepseek.com",
   apiKey: "",
   model: "deepseek-chat",
+  modelList: [],
   temperature: 0.7,
   workspace: "",
   defaultMode: "standard",
@@ -97,6 +98,10 @@ export function loadSettings(): Settings {
   // 12 是旧版默认轮数，上限太紧；老用户跟着升到新默认，除非自己改过
   if (!("maxRounds" in raw) || raw.maxRounds === 12) {
     merged.maxRounds = DEFAULT_SETTINGS.maxRounds;
+  }
+  // 老数据没有常用模型列表：把当前模型放进去，保证切换菜单非空
+  if (!Array.isArray(merged.modelList)) {
+    merged.modelList = merged.model ? [merged.model] : [];
   }
   return merged;
 }

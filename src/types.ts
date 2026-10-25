@@ -109,6 +109,8 @@ export interface Settings {
   baseUrl: string;
   apiKey: string;
   model: string;
+  /** 常用模型列表，供输入框右下角快速切换 */
+  modelList: string[];
   temperature: number;
   workspace: string;
   defaultMode: AgentMode;

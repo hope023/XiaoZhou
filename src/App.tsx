@@ -81,8 +81,8 @@ export default function App() {
   const [streamingIds, setStreamingIds] = useState<Set<string>>(new Set());
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  /** 打开设置面板时是否直接定位到定时任务区 */
-  const [focusSchedules, setFocusSchedules] = useState(false);
+  /** 打开设置面板时直接落到哪个页签 */
+  const [initialTab, setInitialTab] = useState<"general" | "model" | "schedule">("general");
   const [maximized, setMaximized] = useState(false);
   const [pendingApproval, setPendingApproval] = useState<{
     summary: string;
@@ -622,11 +622,11 @@ export default function App() {
           onDelete={deleteSession}
           onExport={exportSession}
           onOpenSettings={() => {
-            setFocusSchedules(false);
+            setInitialTab("general");
             setSettingsOpen(true);
           }}
           onOpenSchedules={() => {
-            setFocusSchedules(true);
+            setInitialTab("schedule");
             setSettingsOpen(true);
           }}
         />
@@ -688,6 +688,13 @@ export default function App() {
             images={images}
             onAddImage={(url) => setImages((prev) => [...prev, url])}
             onRemoveImage={(index) => setImages((prev) => prev.filter((_, i) => i !== index))}
+            model={settings.model}
+            models={settings.modelList}
+            onSelectModel={(model) => setSettings((prev) => ({ ...prev, model }))}
+            onManageModels={() => {
+              setInitialTab("model");
+              setSettingsOpen(true);
+            }}
           >
             <SessionTools
               workspace={workspace}
@@ -706,7 +713,7 @@ export default function App() {
           settings={settings}
           schedules={schedules}
           onSchedulesChange={setSchedules}
-          focusSchedules={focusSchedules}
+          initialTab={initialTab}
           onSave={(next) => {
             setSettings(next);
             setSettingsOpen(false);
