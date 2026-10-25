@@ -90,7 +90,92 @@ export function SettingsPanel({ settings, schedules, onSchedulesChange, focusSch
 
         <div className="settings-body" ref={bodyRef}>
           <section className="field-group">
-            <div className="group-label">模型接口</div>
+            <div className="group-label">通用设置</div>
+
+            <div className="field">
+              <label>默认工作目录</label>
+              <div className="input-with-action">
+                <input
+                  value={draft.workspace}
+                  onChange={(event) => patch({ workspace: event.target.value })}
+                  placeholder="D:\\projects"
+                  spellCheck={false}
+                />
+                <button className="ghost-btn" onClick={pickFolder} title="浏览文件夹">
+                  浏览…
+                </button>
+              </div>
+              {workspaceOk === false ? (
+                <span className="field-hint warn">
+                  这个目录不存在，先建好，或者点「浏览…」重新选一个
+                </span>
+              ) : (
+                <span className="field-hint">
+                  新建对话默认用这个目录。已经开着的对话可以在对话顶部的目录栏单独切换，互不影响
+                </span>
+              )}
+            </div>
+
+            <div className="field">
+              <label>默认权限模式</label>
+              <div className="preset-row">
+                {MODES.map((item) => (
+                  <button
+                    key={item.value}
+                    className={`preset ${draft.defaultMode === item.value ? "active" : ""}`}
+                    title={item.desc}
+                    onClick={() => patch({ defaultMode: item.value })}
+                  >
+                    <span className={`mode-dot mode-${item.value}`} />
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+              <span className="field-hint">
+                新建对话默认用这个。已经开着的对话可以在顶栏右侧单独切换，互不影响
+              </span>
+            </div>
+
+            <div className="field">
+              <label>单次任务最多轮数</label>
+              <input
+                type="number"
+                min={1}
+                max={60}
+                value={draft.maxRounds}
+                onChange={(event) =>
+                  patch({ maxRounds: Math.max(1, Math.min(60, Number(event.target.value) || 1)) })
+                }
+              />
+              <span className="field-hint">
+                一轮 = 模型请求一次（一轮里可以同时调多个工具）。复杂任务
+                （读几个文件再改再验证）常见 10~20 轮，超出上限就停下。一般 25
+                够用，只有跑批处理才需要调更高
+              </span>
+            </div>
+
+            <div className="field">
+              <label>上下文预算</label>
+              <input
+                type="number"
+                min={4000}
+                max={200000}
+                step={1000}
+                value={draft.contextBudget}
+                onChange={(event) => {
+                  const next = Number(event.target.value) || 24000;
+                  patch({ contextBudget: Math.max(4000, Math.min(200000, next)) });
+                }}
+              />
+              <span className="field-hint">
+                发给模型的历史上限（近似 token）。超出后自动摘要压缩最早的消息，
+                按模型上下文窗口的一半左右填比较稳，比如 32k 窗口填 16000
+              </span>
+            </div>
+          </section>
+
+          <section className="field-group">
+            <div className="group-label">模型设置</div>
 
             <div className="field">
               <label>快速预设</label>
@@ -174,93 +259,8 @@ export function SettingsPanel({ settings, schedules, onSchedulesChange, focusSch
             </div>
           </section>
 
-          <section className="field-group">
-            <div className="group-label">工作区</div>
-
-            <div className="field">
-              <label>默认工作目录</label>
-              <div className="input-with-action">
-                <input
-                  value={draft.workspace}
-                  onChange={(event) => patch({ workspace: event.target.value })}
-                  placeholder="D:\\projects"
-                  spellCheck={false}
-                />
-                <button className="ghost-btn" onClick={pickFolder} title="浏览文件夹">
-                  浏览…
-                </button>
-              </div>
-              {workspaceOk === false ? (
-                <span className="field-hint warn">
-                  这个目录不存在，先建好，或者点「浏览…」重新选一个
-                </span>
-              ) : (
-                <span className="field-hint">
-                  新建对话默认用这个目录。已经开着的对话可以在对话顶部的目录栏单独切换，互不影响
-                </span>
-              )}
-            </div>
-
-            <div className="field">
-              <label>默认权限模式</label>
-              <div className="preset-row">
-                {MODES.map((item) => (
-                  <button
-                    key={item.value}
-                    className={`preset ${draft.defaultMode === item.value ? "active" : ""}`}
-                    title={item.desc}
-                    onClick={() => patch({ defaultMode: item.value })}
-                  >
-                    <span className={`mode-dot mode-${item.value}`} />
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-              <span className="field-hint">
-                新建对话默认用这个。已经开着的对话可以在顶栏右侧单独切换，互不影响
-              </span>
-            </div>
-
-            <div className="field">
-              <label>单次任务最多轮数</label>
-              <input
-                type="number"
-                min={1}
-                max={60}
-                value={draft.maxRounds}
-                onChange={(event) =>
-                  patch({ maxRounds: Math.max(1, Math.min(60, Number(event.target.value) || 1)) })
-                }
-              />
-              <span className="field-hint">
-                一轮 = 模型请求一次（一轮里可以同时调多个工具）。复杂任务
-                （读几个文件再改再验证）常见 10~20 轮，超出上限就停下。一般 25
-                够用，只有跑批处理才需要调更高
-              </span>
-            </div>
-
-            <div className="field">
-              <label>上下文预算</label>
-              <input
-                type="number"
-                min={4000}
-                max={200000}
-                step={1000}
-                value={draft.contextBudget}
-                onChange={(event) => {
-                  const next = Number(event.target.value) || 24000;
-                  patch({ contextBudget: Math.max(4000, Math.min(200000, next)) });
-                }}
-              />
-              <span className="field-hint">
-                发给模型的历史上限（近似 token）。超出后自动丢掉最早的消息，
-                按模型上下文窗口的一半左右填比较稳，比如 32k 窗口填 16000
-              </span>
-            </div>
-          </section>
-
           <section className="field-group" id="schedule-group">
-            <div className="group-label">定时任务</div>
+            <div className="group-label">定时任务设置</div>
             <ScheduleManager
               schedules={schedules}
               defaultWorkspace={settings.workspace}
