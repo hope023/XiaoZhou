@@ -615,7 +615,6 @@ export default function App() {
           sessions={sessions}
           activeId={activeSession?.id ?? ""}
           defaultWorkspace={settings.workspace}
-          model={settings.model}
           streamingIds={streamingIds}
           onSelect={(id) => setActiveId(id)}
           onNew={newSession}

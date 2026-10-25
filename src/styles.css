@@ -2247,3 +2247,84 @@ button {
 .model-tag-del:hover {
   color: #dc2626;
 }
+
+/* ---------------- 思考过程折叠块 ---------------- */
+
+.think-box {
+  margin: 6px 0;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--bg-soft);
+  overflow: hidden;
+}
+
+.think-box > summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  font-size: 11.4px;
+  color: var(--text-faint);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+}
+
+.think-box > summary::-webkit-details-marker {
+  display: none;
+}
+
+.think-box > summary:hover {
+  color: var(--text-dim);
+}
+
+.think-label {
+  flex: 1;
+}
+
+.think-box.thinking .think-label {
+  color: var(--accent);
+  animation: pulse 1.4s ease infinite;
+}
+
+.think-chevron {
+  transition: transform 0.15s;
+  opacity: 0.6;
+}
+
+.think-chevron.open {
+  transform: rotate(90deg);
+}
+
+.think-body {
+  padding: 2px 12px 9px;
+  font-size: 12.3px;
+  color: var(--text-faint);
+  border-top: 1px dashed var(--line);
+}
+
+.think-body .md {
+  font-size: 12.3px;
+  color: var(--text-faint);
+}
+
+/* ---------------- 侧栏底部排版 ---------------- */
+
+.sidebar-foot {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.app-version {
+  font-size: 10.6px;
+  color: var(--text-faint);
+  user-select: none;
+}
+
+.settings-icon {
+  flex: none;
+}

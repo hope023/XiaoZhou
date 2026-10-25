@@ -6,7 +6,6 @@ interface Props {
   activeId: string;
   /** 设置里的默认目录，会话没单独设过时归到这一组 */
   defaultWorkspace: string;
-  model: string;
   /** 正在执行的会话 id 集合，列表里显示小圆点 */
   streamingIds?: Set<string>;
   onSelect: (id: string) => void;
@@ -29,7 +28,6 @@ export function Sidebar({
   sessions,
   activeId,
   defaultWorkspace,
-  model,
   streamingIds,
   onSelect,
   onNew,
@@ -218,7 +216,12 @@ export function Sidebar({
       </div>
 
       <div className="sidebar-foot">
-        <button className="settings-btn" onClick={onOpenSettings} title="设置 (Ctrl+,)">
+        <span className="app-version">小舟 v0.1.0</span>
+        <button
+          className="icon-btn settings-icon"
+          onClick={onOpenSettings}
+          title="设置 (Ctrl+,)"
+        >
           <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
             <circle cx="8" cy="8" r="2.1" stroke="currentColor" strokeWidth="1.1" fill="none" />
             <path
@@ -228,7 +231,6 @@ export function Sidebar({
               strokeLinecap="round"
             />
           </svg>
-          <span className="settings-model">{model || "未配置模型"}</span>
         </button>
       </div>
     </aside>
