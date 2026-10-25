@@ -6,6 +6,7 @@ import {
   requestPermission,
   sendNotification,
 } from "@tauri-apps/plugin-notification";
+import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import logo from "./assets/logo.png";
 import { Composer } from "./components/Composer";
@@ -176,6 +177,42 @@ export default function App() {
     };
     // workspace 变化时重挂（read_reference 依赖它）
   }, [workspace]);
+
+  /* ---------- 全局呼出快捷键（按设置注册，改动即重挂） ---------- */
+
+  const toggleMainWindow = useCallback(async () => {
+    const win = getCurrentWindow();
+    const visible = await win.isVisible().catch(() => false);
+    const focused = await win.isFocused().catch(() => false);
+    if (visible && focused) {
+      await win.hide().catch(() => {});
+    } else {
+      await win.unminimize().catch(() => {});
+      await win.show().catch(() => {});
+      await win.setFocus().catch(() => {});
+    }
+  }, []);
+
+  const shortcutRef = useRef("");
+  useEffect(() => {
+    const desired = (settings.toggleShortcut || "").trim().toLowerCase() || "alt+space";
+    if (shortcutRef.current === desired) return;
+    const apply = async () => {
+      if (shortcutRef.current) {
+        await unregister(shortcutRef.current).catch(() => {});
+        shortcutRef.current = "";
+      }
+      try {
+        await register(desired, (event) => {
+          if (event.state === "Pressed") void toggleMainWindow();
+        });
+        shortcutRef.current = desired;
+      } catch (error) {
+        void notify("快捷键注册失败", `${desired}：${error instanceof Error ? error.message : String(error)}`);
+      }
+    };
+    void apply();
+  }, [settings.toggleShortcut, toggleMainWindow]);
 
   // 首次启动给个默认工作目录
   useEffect(() => {

@@ -220,6 +220,20 @@ export function SettingsPanel({ settings, schedules, onSchedulesChange, initialT
             </div>
 
             <div className="field">
+              <label>全局呼出快捷键</label>
+              <input
+                value={draft.toggleShortcut}
+                onChange={(event) => patch({ toggleShortcut: event.target.value })}
+                placeholder="alt+space"
+                spellCheck={false}
+              />
+              <span className="field-hint">
+                任何应用里按它呼出/隐藏小舟。写法：修饰键加号连键名，如 alt+space、
+                ctrl+shift+z、super+j。改完点「保存」立即生效；注册失败会弹系统通知
+              </span>
+            </div>
+
+            <div className="field">
               <label>关于</label>
               <div className="schedule-row">
                 <button className="ghost-btn" onClick={() => void checkUpdate()} disabled={checking}>

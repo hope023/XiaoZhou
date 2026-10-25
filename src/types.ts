@@ -122,6 +122,8 @@ export interface Settings {
   /** 发给模型的上下文预算（近似 token 数） */
   contextBudget: number;
   maxRounds: number;
+  /** 全局呼出快捷键，如 alt+space、ctrl+shift+z */
+  toggleShortcut: string;
 }
 
 /** 多模态内容块：文本或图片（data URL） */

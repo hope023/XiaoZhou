@@ -15,6 +15,7 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultMode: "standard",
   contextBudget: 24000,
   maxRounds: 25,
+  toggleShortcut: "alt+space",
 };
 
 export function newId(): string {
