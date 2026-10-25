@@ -2308,23 +2308,29 @@ button {
   color: var(--text-faint);
 }
 
-/* ---------------- 侧栏底部排版 ---------------- */
+/* ---------------- 侧栏底部 ---------------- */
 
 .sidebar-foot {
   border-top: 1px solid var(--line);
   padding-top: 8px;
+}
+
+.settings-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-}
-
-.app-version {
-  font-size: 10.6px;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
   color: var(--text-faint);
-  user-select: none;
+  font-size: 12px;
+  transition: background 0.12s, color 0.12s;
 }
 
-.settings-icon {
-  flex: none;
+.settings-bar:hover {
+  background: var(--hover);
+  color: var(--text-dim);
 }

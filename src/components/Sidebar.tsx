@@ -216,13 +216,8 @@ export function Sidebar({
       </div>
 
       <div className="sidebar-foot">
-        <span className="app-version">小舟 v0.1.0</span>
-        <button
-          className="icon-btn settings-icon"
-          onClick={onOpenSettings}
-          title="设置 (Ctrl+,)"
-        >
-          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+        <button className="settings-bar" onClick={onOpenSettings} title="设置 (Ctrl+,)">
+          <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
             <circle cx="8" cy="8" r="2.1" stroke="currentColor" strokeWidth="1.1" fill="none" />
             <path
               d="M8 1.9v1.5M8 12.6v1.5M1.9 8h1.5M12.6 8h1.5M3.7 3.7l1.1 1.1M11.2 11.2l1.1 1.1M12.3 3.7l-1.1 1.1M4.8 11.2l-1.1 1.1"
@@ -231,6 +226,7 @@ export function Sidebar({
               strokeLinecap="round"
             />
           </svg>
+          <span>设置</span>
         </button>
       </div>
     </aside>
