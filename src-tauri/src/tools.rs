@@ -264,6 +264,46 @@ fn record_change(root: &Path, record: &ChangeRecord) {
     }
 }
 
+fn tool_undo_many(root: &str, count: u64) -> Result<ToolOutcome, String> {
+    let root_canon = root_of(root)?;
+    let log = change_log(&root_canon);
+    let text = std::fs::read_to_string(&log).unwrap_or_default();
+    let mut lines: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
+    if lines.is_empty() {
+        return Ok(ToolOutcome::fail("没有可回滚的改动记录"));
+    }
+    let take = count.clamp(1, 50) as usize;
+    let start = lines.len().saturating_sub(take);
+    let targets: Vec<&str> = lines.split_off(start);
+    // 倒序恢复
+    let mut restored = Vec::new();
+    for line in targets.iter().rev() {
+        let Ok(record) = serde_json::from_str::<ChangeRecord>(line) else { continue };
+        let path = root_canon.join(&record.path);
+        if record.existed {
+            let backup = state_dir(&root_canon).join("backups").join(&record.backup);
+            if backup.exists() {
+                if std::fs::copy(&backup, &path).is_ok() {
+                    restored.push(record.path.clone());
+                }
+            }
+        } else if path.exists() {
+            let _ = std::fs::remove_file(&path);
+            restored.push(record.path.clone());
+        }
+    }
+    // 剩余记录写回
+    std::fs::write(&log, lines.join("\n") + "\n").ok();
+    if restored.is_empty() {
+        return Ok(ToolOutcome::fail("没有恢复任何文件（备份可能已丢失）"));
+    }
+    Ok(ToolOutcome::ok(format!(
+        "已回滚最近 {} 步，恢复的文件：{}",
+        restored.len(),
+        restored.join("、")
+    )))
+}
+
 fn tool_undo_last(root: &str) -> Result<ToolOutcome, String> {
     let root_canon = root_of(root)?;
     let log = change_log(&root_canon);
@@ -784,137 +824,40 @@ async fn tool_run_command(
             "这条命令被拦下了：{reason}。这类操作不可逆，如需执行请用户自己在终端里运行"
         )));
     }
-    let cwd = resolve(root, ".")?;
     let secs = args
         .get("timeout_sec")
         .and_then(Value::as_u64)
         .unwrap_or(60)
         .clamp(5, 300);
 
-    let mut cmd = if cfg!(windows) {
-        let mut c = tokio::process::Command::new("powershell");
-        c.arg("-NoProfile")
-            .arg("-NonInteractive")
-            .arg("-ExecutionPolicy")
-            .arg("Bypass")
-            .arg("-Command")
-            // 先切 UTF-8，否则中文输出全是乱码
-            .arg(format!(
-                "[Console]::OutputEncoding=[Text.Encoding]::UTF8; $ErrorActionPreference='Continue'; {command}"
-            ));
-        c
-    } else {
-        let mut c = tokio::process::Command::new("bash");
-        c.arg("-lc").arg(&command);
-        c
-    };
-
-    cmd.current_dir(&cwd)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true);
-
-    #[cfg(windows)]
-    {
-        // CREATE_NO_WINDOW：避免弹黑框
-        cmd.creation_flags(0x0800_0000);
-    }
-
-    let run_id = args.get("run_id").and_then(Value::as_str).unwrap_or("").to_string();
-    let flag = Arc::new(AtomicBool::new(false));
+    // 注册取消标记：前端「中断」按钮用 run_id 找到这里
+    let run_id = args
+        .get("run_id")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    let cancel = Arc::new(std::sync::atomic::AtomicBool::new(false));
     if !run_id.is_empty() {
         if let Ok(mut table) = cancel_table().lock() {
-            table.insert(run_id.clone(), flag.clone());
+            table.insert(run_id.clone(), cancel.clone());
         }
     }
 
-    let started = std::time::Instant::now();
-    let mut child = cmd.spawn().map_err(|e| format!("命令启动失败：{e}"))?;
-    let out_handle = child
-        .stdout
-        .take()
-        .map(|s| spawn_reader(s, on_event.clone(), flag.clone()));
-    let err_handle = child
-        .stderr
-        .take()
-        .map(|s| spawn_reader(s, on_event.clone(), flag.clone()));
-
-    let mut cancelled = false;
-    let mut timed_out = false;
-    let mut exit_code: Option<i32> = None;
-
-    loop {
-        if flag.load(Ordering::SeqCst) {
-            let _ = child.kill().await;
-            cancelled = true;
-            break;
-        }
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                exit_code = Some(status.code().unwrap_or(-1));
-                break;
-            }
-            Ok(None) => {
-                if started.elapsed() > Duration::from_secs(secs) {
-                    let _ = child.kill().await;
-                    timed_out = true;
-                    break;
-                }
-                tokio::time::sleep(Duration::from_millis(120)).await;
-            }
-            Err(e) => return Ok(ToolOutcome::fail(format!("等待命令失败：{e}"))),
-        }
-    }
-
-    let stdout = match out_handle {
-        Some(handle) => handle.await.unwrap_or_default(),
-        None => String::new(),
-    };
-    let stderr = match err_handle {
-        Some(handle) => handle.await.unwrap_or_default(),
-        None => String::new(),
-    };
+    let (ok, output) = crate::shell::run_in_persistent_shell(
+        root,
+        &command,
+        secs,
+        cancel.clone(),
+        Some(on_event.clone()),
+    )
+    .await;
 
     if !run_id.is_empty() {
         if let Ok(mut table) = cancel_table().lock() {
             table.remove(&run_id);
         }
     }
-
-    if timed_out {
-        return Ok(ToolOutcome::fail(format!(
-            "命令超过 {secs}s 未结束，已强制终止"
-        )));
-    }
-
-    let elapsed = started.elapsed().as_secs_f64();
-    let mut text = String::new();
-    if cancelled {
-        text.push_str(&format!("已手动中断，耗时 {elapsed:.1}s\n"));
-    } else {
-        text.push_str(&format!("退出码 {}，耗时 {elapsed:.1}s\n", exit_code.unwrap_or(-1)));
-    }
-    let out_trim = stdout.trim_end();
-    let err_trim = stderr.trim_end();
-    if !out_trim.is_empty() {
-        text.push_str("--- 标准输出 ---\n");
-        text.push_str(out_trim);
-        text.push('\n');
-    }
-    if !err_trim.is_empty() {
-        text.push_str("--- 错误输出 ---\n");
-        text.push_str(err_trim);
-        text.push('\n');
-    }
-    if out_trim.is_empty() && err_trim.is_empty() {
-        text.push_str("（无输出）\n");
-    }
-
-    Ok(ToolOutcome {
-        ok: !cancelled && exit_code == Some(0),
-        output: clip(text, MAX_OUTPUT_CHARS),
-    })
+    Ok(ToolOutcome { ok, output: clip(output, MAX_OUTPUT_CHARS) })
 }
 
 /// 读取工作目录下的项目约定文件，注入到 system prompt
@@ -1524,6 +1467,199 @@ fn tool_memory(root: &str, args: &Value) -> Result<ToolOutcome, String> {
             "未知 action：{other}（可用 add / list / remove / clear）"
         ))),
     }
+}
+
+
+/* ---------------- Web 搜索与抓取 ---------------- */
+
+const BROWSER_UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
+
+/// 粗略剥掉 HTML 标签，转成可读文本
+fn html_to_text(html: &str) -> String {
+    let mut text = html.to_string();
+    // 去掉 script/style/注释
+    for tag in ["script", "style", "noscript"] {
+        let mut out = String::new();
+        let lower = text.to_lowercase();
+        let mut rest = lower.as_str();
+        let mut src = text.as_str();
+        while let Some(pos) = rest.find(&format!("<{tag}")) {
+            let end_offset = rest[pos..].find(&format!("</{tag}>")).map(|e| pos + e + tag.len() + 3);
+            match end_offset {
+                Some(end) => {
+                    out.push_str(&src[..pos]);
+                    let consumed = rest[pos..end].len();
+                    src = &src[pos + consumed..];
+                    rest = &rest[end..];
+                }
+                None => break,
+            }
+        }
+        out.push_str(src);
+        text = out;
+    }
+    // 标签转空格
+    let mut out = String::with_capacity(text.len());
+    let mut in_tag = false;
+    for ch in text.chars() {
+        match ch {
+            '<' => in_tag = true,
+            '>' => in_tag = false,
+            _ if !in_tag => out.push(ch),
+            _ => out.push(' '),
+        }
+    }
+    // 常见实体
+    let out = out
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&nbsp;", " ");
+    // 压空白
+    out.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+#[tauri::command]
+pub async fn web_fetch(url: String, max_chars: Option<u64>) -> Result<ToolOutcome, String> {
+    let url = url.trim().to_string();
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        return Ok(ToolOutcome::fail("只支持 http/https 链接"));
+    }
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(20))
+        .user_agent(BROWSER_UA)
+        .build()
+        .map_err(|e| format!("HTTP 初始化失败：{e}"))?;
+    let resp = client.get(&url).send().await.map_err(|e| format!("请求失败：{e}"))?;
+    let status = resp.status().as_u16();
+    let final_url = resp.url().to_string();
+    let body = resp.text().await.map_err(|e| format!("读取失败：{e}"))?;
+    let text = html_to_text(&body);
+    let limit = max_chars.unwrap_or(12_000).clamp(1_000, 40_000) as usize;
+    Ok(ToolOutcome::ok(format!(
+        "HTTP {status}（最终地址 {final_url}）\n\n{}",
+        clip(text, limit)
+    )))
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchResult {
+    title: String,
+    url: String,
+    snippet: String,
+}
+
+/// Bing 搜索（国内可达）。解析失败时返回原文片段，不至于完全没结果
+#[tauri::command]
+pub async fn web_search(query: String, max_results: Option<u64>) -> Result<ToolOutcome, String> {
+    let query = query.trim().to_string();
+    if query.is_empty() {
+        return Ok(ToolOutcome::fail("查询词为空"));
+    }
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(20))
+        .user_agent(BROWSER_UA)
+        .build()
+        .map_err(|e| format!("HTTP 初始化失败：{e}"))?;
+    let resp = client
+        .get("https://cn.bing.com/search")
+        .query(&[("q", query.as_str()), ("count", "15")])
+        .header("Accept-Language", "zh-CN,zh;q=0.9")
+        .send()
+        .await
+        .map_err(|e| format!("请求失败：{e}"))?;
+    let html = resp.text().await.map_err(|e| format!("读取失败：{e}"))?;
+
+    let mut results: Vec<SearchResult> = Vec::new();
+    let limit = max_results.unwrap_or(8).clamp(1, 15) as usize;
+
+    for chunk in html.split("<li class=\"b_algo\"") {
+        if results.len() >= limit {
+            break;
+        }
+        // 链接
+        let Some(href_pos) = chunk.find("<h2") else { continue };
+        let block = &chunk[href_pos..];
+        let Some(href_start) = block.find("href=\"") else { continue };
+        let after = &block[href_start + 6..];
+        let Some(href_end) = after.find('"') else { continue };
+        let url = after[..href_end].to_string();
+        if url.starts_with("http") == false {
+            continue;
+        }
+        // 标题：h2 内 <a> 的文本
+        let title = html_to_text(block[..block.find("</h2>").unwrap_or(block.len())].split('>').last().unwrap_or(""));
+        // 摘要：第一个 <p>
+        let snippet = chunk
+            .find("<p")
+            .and_then(|p| {
+                let inner_start = p;
+                chunk[p..].find("</p>").map(|len| {
+                    html_to_text(&chunk[inner_start..inner_start + len])
+                })
+            })
+            .unwrap_or_default();
+        if title.trim().is_empty() && snippet.trim().is_empty() {
+            continue;
+        }
+        results.push(SearchResult {
+            title: title.trim().chars().take(120).collect(),
+            url,
+            snippet: snippet.trim().chars().take(200).collect(),
+        });
+    }
+
+    if results.is_empty() {
+        return Ok(ToolOutcome::fail(
+            "搜索没有解析到结果（Bing 可能改版或被限流）。可以直接用 web_fetch 抓你已知的网页",
+        ));
+    }
+    let body = results
+        .iter()
+        .enumerate()
+        .map(|(i, r)| format!("{}. {}\n   {}\n   {}\n", i + 1, r.title, r.url, r.snippet))
+        .collect::<Vec<_>>()
+        .join("\n");
+    Ok(ToolOutcome::ok(format!(
+        "搜索「{query}」共 {} 条结果：\n{}",
+        results.len(),
+        body
+    )))
+}
+
+/* ---------------- 多步检查点回滚 ---------------- */
+
+#[tauri::command]
+pub fn list_changes(root: String) -> Result<Vec<Value>, String> {
+    let root_canon = root_of(&root)?;
+    let text = std::fs::read_to_string(change_log(&root_canon)).unwrap_or_default();
+    let mut out = Vec::new();
+    for line in text.lines().filter(|l| !l.trim().is_empty()) {
+        if let Ok(record) = serde_json::from_str::<Value>(line) {
+            out.push(record);
+        }
+    }
+    // 倒序：最近一次在最前
+    out.reverse();
+    Ok(out
+        .iter()
+        .map(|record| {
+            json!({
+                "ts": record.get("ts").cloned().unwrap_or(Value::Null),
+                "path": record.get("path").cloned().unwrap_or(Value::Null),
+                "existed": record.get("existed").cloned().unwrap_or(Value::Null),
+            })
+        })
+        .collect())
+}
+
+/// 回滚最近 count 步文件改动（倒序逐条恢复快照）
+#[tauri::command]
+pub fn undo_changes(root: String, count: u64) -> Result<ToolOutcome, String> {
+    tool_undo_many(&root, count)
 }
 
 #[cfg(test)]

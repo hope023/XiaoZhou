@@ -1,5 +1,6 @@
 mod llm;
 mod mcp;
+mod shell;
 mod tools;
 
 
@@ -29,6 +30,10 @@ pub fn run() {
             tools::write_export,
             tools::check_update,
             tools::memory_read,
+            tools::web_fetch,
+            tools::web_search,
+            tools::list_changes,
+            tools::undo_changes,
             mcp::mcp_load_config,
             mcp::mcp_save_config,
             mcp::mcp_connect,

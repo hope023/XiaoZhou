@@ -42,8 +42,104 @@ impl McpServer {
     }
 }
 
-fn server_table() -> &'static Mutex<HashMap<String, Arc<McpServer>>> {
-    static TABLE: OnceLock<Mutex<HashMap<String, Arc<McpServer>>>> = OnceLock::new();
+/// HTTP (Streamable) transport 的 server：每个请求一次 POST
+struct HttpMcp {
+    url: String,
+    headers: HashMap<String, String>,
+    session: std::sync::RwLock<Option<String>>,
+    next_id: AtomicU64,
+}
+
+impl HttpMcp {
+    async fn request(&self, method: &str, params: Value) -> Result<Value, String> {
+        let id = self.next_id.fetch_add(1, Ordering::SeqCst);
+        let message = json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params });
+
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(30))
+            .build()
+            .map_err(|e| format!("HTTP 客户端初始化失败：{e}"))?;
+        let mut req = client
+            .post(&self.url)
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json, text/event-stream");
+        for (key, value) in &self.headers {
+            req = req.header(key, value);
+        }
+        if let Ok(session) = self.session.read() {
+            if let Some(sid) = session.as_ref() {
+                req = req.header("mcp-session-id", sid);
+            }
+        }
+
+        let resp = req
+            .json(&message)
+            .send()
+            .await
+            .map_err(|e| format!("请求失败：{e}"))?;
+
+        // 记住会话 id（Streamable HTTP 规范）
+        if let Some(sid) = resp.headers().get("mcp-session-id").and_then(|v| v.to_str().ok()) {
+            if let Ok(mut session) = self.session.write() {
+                *session = Some(sid.to_string());
+            }
+        }
+
+        let status = resp.status();
+        let content_type = resp
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("")
+            .to_string();
+        let body = resp.text().await.map_err(|e| format!("读取失败：{e}"))?;
+
+        if !status.is_success() {
+            return Err(format!("HTTP {status}：{}", truncate_json(&json!(body))));
+        }
+
+        // 响应可能是 JSON 或 SSE
+        let payload: Value = if content_type.contains("event-stream") {
+            let mut found = None;
+            for line in body.lines() {
+                if let Some(data) = line.strip_prefix("data:") {
+                    if let Ok(value) = serde_json::from_str::<Value>(data.trim()) {
+                        if value.get("id").and_then(Value::as_u64) == Some(id) {
+                            found = Some(value);
+                            break;
+                        }
+                    }
+                }
+            }
+            found.ok_or_else(|| "SSE 响应里没有匹配的结果".to_string())?
+        } else {
+            serde_json::from_str(&body).map_err(|e| format!("解析失败：{e}"))?
+        };
+
+        match payload.get("error") {
+            Some(err) => Err(format!("MCP 错误：{}", truncate_json(err))),
+            None => Ok(payload.get("result").cloned().unwrap_or(Value::Null)),
+        }
+    }
+}
+
+#[derive(Clone)]
+enum McpConn {
+    Stdio(Arc<McpServer>),
+    Http(Arc<HttpMcp>),
+}
+
+impl McpConn {
+    async fn request(&self, method: &str, params: Value) -> Result<Value, String> {
+        match self {
+            McpConn::Stdio(server) => server.request(method, params).await,
+            McpConn::Http(server) => server.request(method, params).await,
+        }
+    }
+}
+
+fn server_table() -> &'static Mutex<HashMap<String, McpConn>> {
+    static TABLE: OnceLock<Mutex<HashMap<String, McpConn>>> = OnceLock::new();
     TABLE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
@@ -70,7 +166,7 @@ pub fn mcp_save_config(config: Value) -> Result<(), String> {
 fn spawn_reader(
     stdout: tokio::process::ChildStdout,
     name: String,
-    table: Arc<Mutex<HashMap<String, Arc<McpServer>>>>,
+    table: Arc<Mutex<HashMap<String, McpConn>>>,
 ) {
     tokio::spawn(async move {
         let mut lines = BufReader::new(stdout).lines();
@@ -82,7 +178,7 @@ fn spawn_reader(
                 continue; // 通知消息忽略
             };
             let Some(table_lock) = table.lock().ok() else { continue };
-            let Some(server) = table_lock.get(&name) else { continue };
+            let Some(McpConn::Stdio(server)) = table_lock.get(&name) else { continue };
             if let Some(tx) = server.pending.lock().ok().and_then(|mut p| p.remove(&id)) {
                 let result = match message.get("error") {
                     Some(err) => Err(format!("MCP 错误：{}", truncate_json(err))),
@@ -93,7 +189,7 @@ fn spawn_reader(
         }
         // 进程退出：所有挂起请求报错，从表里摘除
         if let Ok(mut table_lock) = table.lock() {
-            if let Some(server) = table_lock.remove(&name) {
+            if let Some(McpConn::Stdio(server)) = table_lock.remove(&name) {
                 if let Ok(mut pending) = server.pending.lock() {
                     for (_, tx) in pending.drain() {
                         let _ = tx.send(Err("server 进程已退出".into()));
@@ -119,6 +215,70 @@ pub async fn mcp_connect(name: String) -> Result<Vec<Value>, String> {
     let Some(spec) = config.get("mcpServers").and_then(|s| s.get(&name)).cloned() else {
         return Err(format!("配置里没有叫「{name}」的 server"));
     };
+    let conn_type = spec.get("type").and_then(Value::as_str).unwrap_or("stdio");
+    if conn_type == "http" {
+        // Streamable HTTP transport
+        let url = spec
+            .get("url")
+            .and_then(Value::as_str)
+            .ok_or("http 类型需要 url")?
+            .to_string();
+        let headers: HashMap<String, String> = spec
+            .get("headers")
+            .and_then(Value::as_object)
+            .map(|obj| {
+                obj.iter()
+                    .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let server = Arc::new(HttpMcp {
+            url,
+            headers,
+            session: std::sync::RwLock::new(None),
+            next_id: AtomicU64::new(1),
+        });
+        server_table()
+            .lock()
+            .map_err(|_| "锁损坏")?
+            .insert(name.clone(), McpConn::Http(server));
+
+        // 先克隆出 Arc 再放锁（MutexGuard 不能跨 await）
+        let http = server_table()
+            .lock()
+            .map_err(|_| "锁损坏")?
+            .get(&name)
+            .and_then(|conn| match conn {
+                McpConn::Http(http) => Some(http.clone()),
+                _ => None,
+            })
+            .ok_or("插入失败")?;
+        let init = http
+            .request(
+                "initialize",
+                json!({
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {},
+                    "clientInfo": { "name": "xiaozhou", "version": "0.1.0" }
+                }),
+            )
+            .await?;
+        let _ = init;
+        let _ = http
+            .request("notifications/initialized", json!({}))
+            .await
+            .unwrap_or(Value::Null);
+        let listing = http
+            .request("tools/list", json!({}))
+            .await
+            .map_err(|e| format!("已连上但拉取工具列表失败：{e}"))?;
+        let tools = listing
+            .get("tools")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        return Ok(tools);
+    }
     let command = spec
         .get("command")
         .and_then(Value::as_str)
@@ -185,7 +345,7 @@ pub async fn mcp_connect(name: String) -> Result<Vec<Value>, String> {
     server_table()
         .lock()
         .map_err(|_| "锁损坏")?
-        .insert(name.clone(), server.clone());
+        .insert(name.clone(), McpConn::Stdio(server.clone()));
     let table = Arc::new(Mutex::new(
         server_table()
             .lock()
@@ -221,7 +381,7 @@ pub async fn mcp_connect(name: String) -> Result<Vec<Value>, String> {
         .unwrap_or_default();
 
     if let Ok(entry) = server_table().lock() {
-        if let Some(entry_server) = entry.get(&name) {
+        if let Some(McpConn::Stdio(entry_server)) = entry.get(&name) {
             if let Ok(mut tools_guard) = entry_server.tools.write() {
                 *tools_guard = tools.clone();
             }
@@ -237,7 +397,7 @@ pub async fn mcp_disconnect(name: String) -> Result<(), String> {
         .lock()
         .map_err(|_| "锁损坏")?
         .remove(&name);
-    if let Some(server) = server {
+    if let Some(McpConn::Stdio(server)) = server {
         let mut child_opt = server
             .process
             .lock()
@@ -265,7 +425,8 @@ pub struct McpToolInfo {
 pub fn mcp_all_tools() -> Result<Vec<McpToolInfo>, String> {
     let table = server_table().lock().map_err(|_| "锁损坏")?;
     let mut out = Vec::new();
-    for (server_name, server) in table.iter() {
+    for (server_name, conn) in table.iter() {
+        let McpConn::Stdio(server) = conn else { continue };
         let Ok(tool_list) = server.tools.read() else { continue };
         for tool in tool_list.iter() {
             out.push(McpToolInfo {
@@ -303,19 +464,28 @@ pub fn mcp_status() -> Vec<McpStatus> {
     };
     table
         .iter()
-        .map(|(name, server)| McpStatus {
-            name: name.clone(),
-            connected: true,
-            tools: server
-                .tools
-                .read()
-                .map(|tools| {
-                    tools
-                        .iter()
-                        .filter_map(|t| t.get("name").and_then(Value::as_str).map(str::to_string))
-                        .collect()
-                })
-                .unwrap_or_default(),
+        .map(|(name, conn)| {
+            let tools = match conn {
+                McpConn::Stdio(server) => server
+                    .tools
+                    .read()
+                    .map(|tools| {
+                        tools
+                            .iter()
+                            .filter_map(|t| t.get("name").and_then(Value::as_str).map(str::to_string))
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                McpConn::Http(_) => {
+                    // HTTP 无缓存列表；连过就算 0，详情看工具调用结果
+                    Vec::new()
+                }
+            };
+            McpStatus {
+                name: name.clone(),
+                connected: true,
+                tools,
+            }
         })
         .collect()
 }
@@ -330,13 +500,13 @@ pub async fn mcp_call_tool(
         let table = server_table().lock().map_err(|_| "锁损坏")?;
         table.get(&server).cloned()
     };
-    let Some(server_conn) = entry else {
+    let Some(conn) = entry else {
         return Ok(super::tools::ToolOutcome::fail(format!(
             "MCP server「{server}」没有连接，先到设置里连接它"
         )));
     };
 
-    let result = server_conn
+    let result = conn
         .request(
             "tools/call",
             json!({ "name": tool, "arguments": args }),

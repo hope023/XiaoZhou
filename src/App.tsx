@@ -466,8 +466,15 @@ export default function App() {
           workspace,
           mode,
           sessionTitle: activeSession?.title || "新对话",
+          todos: activeSession?.todos,
           isAborted: () => abortMapRef.current.get(sessionId) ?? false,
           onAssistant: (patch) => patchMessage(sessionId, assistantMessage.id, patch),
+          onTodos: (items) =>
+            setSessions((prev) =>
+              prev.map((session) =>
+                session.id === sessionId ? { ...session, todos: items } : session
+              )
+            ),
           requestApproval,
         });
       } catch (error) {
@@ -748,6 +755,24 @@ export default function App() {
             }}
           >
             <div className="messages-inner">
+              {!isEmpty && (activeSession?.todos?.length ?? 0) > 0 && (
+                <div className="todo-panel">
+                  <div className="todo-title">
+                    任务清单 · {activeSession!.todos!.filter((t) => t.status === "done").length}/
+                    {activeSession!.todos!.length}
+                  </div>
+                  {activeSession!.todos!.map((todo) => (
+                    <div className={`todo-item todo-${todo.status}`} key={todo.id}>
+                      <span className="todo-mark">
+                        {todo.status === "done" ? "✓" : todo.status === "in_progress" ? "▶" : "○"}
+                      </span>
+                      <span className={todo.status === "done" ? "todo-done-text" : ""}>
+                        {todo.content}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
               {isEmpty ? (
                 <div className="empty">
                   <img className="empty-logo" src={logo} alt="" draggable={false} />

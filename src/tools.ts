@@ -15,6 +15,10 @@ export interface ExecuteOptions {
   runId?: string;
   /** 命令运行中逐行回调 */
   onOutput?: (text: string) => void;
+  /** todo_write 更新清单 */
+  onTodos?: (
+    items: { id: string; content: string; status: "pending" | "in_progress" | "done" }[]
+  ) => void;
 }
 
 export const TOOL_SPECS = [
@@ -163,7 +167,7 @@ export const TOOL_SPECS = [
     function: {
       name: "run_command",
       description:
-        "在工作目录下执行一条 PowerShell 命令，返回退出码、标准输出和错误输出。用于跑构建、测试、git 等。危险命令（格式化、递归删根目录）会被直接拒绝。",
+        "在持久 PowerShell 会话里执行一条命令：cd、环境变量、后台任务会跨命令保持（比如先 cd 再跑构建）。返回退出码、标准输出和错误输出。危险命令（格式化、递归删根目录）会被直接拒绝。",
       parameters: {
         type: "object",
         properties: {
@@ -198,6 +202,81 @@ export const TOOL_SPECS = [
           keyword: { type: "string", description: "remove 时匹配要删条目的关键词" },
         },
         required: ["action"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "todo_write",
+      description:
+        "维护当前任务的任务清单（全量替换）。3 步以上的任务先建清单，完成一项更新一项，让用户和你自己都能看到进度。一步以内的简单任务不用建。",
+      parameters: {
+        type: "object",
+        properties: {
+          items: {
+            type: "array",
+            description: "完整清单",
+            items: {
+              type: "object",
+              properties: {
+                content: { type: "string", description: "这一步要做什么" },
+                status: {
+                  type: "string",
+                  description: "pending = 未开始；in_progress = 正在做；done = 已完成",
+                },
+              },
+              required: ["content", "status"],
+            },
+          },
+        },
+        required: ["items"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "web_search",
+      description:
+        "联网搜索（Bing）。查报错方案、库的用法、版本号等需要时效信息的问题时用它，不要凭记忆猜。",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "搜索词" },
+          max_results: { type: "integer", description: "结果数上限，默认 8" },
+        },
+        required: ["query"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "web_fetch",
+      description: "抓取一个网页，返回剥掉 HTML 后的正文文本。配合 web_search 使用。",
+      parameters: {
+        type: "object",
+        properties: {
+          url: { type: "string", description: "http/https 链接" },
+          max_chars: { type: "integer", description: "正文字符上限，默认 12000" },
+        },
+        required: ["url"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "undo_changes",
+      description:
+        "一次性回滚最近 N 步文件改动（基于自动快照）。改砸了一串时用它整体回退，比多次 undo_last 快。",
+      parameters: {
+        type: "object",
+        properties: {
+          count: { type: "integer", description: "回滚最近几步，默认 1" },
+        },
+        required: [],
       },
     },
   },
@@ -240,6 +319,14 @@ export function toolLabel(name: string): string {
       return "调用技能";
     case "memory":
       return "长期记忆";
+    case "todo_write":
+      return "更新清单";
+    case "web_search":
+      return "联网搜索";
+    case "web_fetch":
+      return "抓取网页";
+    case "undo_changes":
+      return "批量回滚";
     default:
       if (name.startsWith("mcp__")) {
         const [, server, tool] = name.split("__");
@@ -278,6 +365,13 @@ export function summarizeArgs(name: string, rawArgs: string): string {
   if (name === "glob") return pick("pattern");
   if (name === "undo_last") return "";
   if (name === "use_skill") return pick("name");
+  if (name === "todo_write") {
+    const items = parsed.items;
+    return Array.isArray(items) ? `${items.length} 项` : "清单";
+  }
+  if (name === "web_search") return pick("query");
+  if (name === "web_fetch") return pick("url");
+  if (name === "undo_changes") return `最近 ${parsed.count ?? 1} 步`;
   if (name === "memory") {
     const action = pick("action");
     const detail = action === "add" ? pick("content") : action === "remove" ? pick("keyword") : "";
@@ -302,6 +396,64 @@ export async function executeTool(
     channel.onmessage = (event) => {
       if (event.kind === "output") options.onOutput?.(event.text);
     };
+  }
+
+  // todo_write 是纯前端状态工具
+  if (name === "todo_write") {
+    const rawItems = Array.isArray(args.items) ? args.items : [];
+    const clean = rawItems
+      .filter(
+        (item: unknown): item is { content: string; status?: unknown } =>
+          typeof (item as { content?: unknown })?.content === "string" &&
+          (item as { content: string }).content.trim().length > 0
+      )
+      .map((item, index) => ({
+        id: `todo_${Date.now()}_${index}`,
+        content: item.content.trim(),
+        status: (["pending", "in_progress", "done"] as const).includes(
+          item.status as never
+        )
+          ? (item.status as "pending" | "in_progress" | "done")
+          : "pending",
+      }));
+    options?.onTodos?.(clean);
+    const done = clean.filter((t) => t.status === "done").length;
+    return {
+      ok: true,
+      output: `清单已更新（共 ${clean.length} 项，已完成 ${done}）。开始做某一步和完成某一步时，都要用 todo_write 更新状态。`,
+    };
+  }
+
+  // web 与批量回滚走独立命令
+  if (name === "web_search") {
+    try {
+      return await invoke<ToolOutcome>("web_search", {
+        query: args.query ?? "",
+        maxResults: typeof args.max_results === "number" ? args.max_results : null,
+      });
+    } catch (err) {
+      return { ok: false, output: `搜索失败：${typeof err === "string" ? err : String(err)}` };
+    }
+  }
+  if (name === "web_fetch") {
+    try {
+      return await invoke<ToolOutcome>("web_fetch", {
+        url: args.url ?? "",
+        maxChars: typeof args.max_chars === "number" ? args.max_chars : null,
+      });
+    } catch (err) {
+      return { ok: false, output: `抓取失败：${typeof err === "string" ? err : String(err)}` };
+    }
+  }
+  if (name === "undo_changes") {
+    try {
+      return await invoke<ToolOutcome>("undo_changes", {
+        root,
+        count: typeof args.count === "number" ? args.count : 1,
+      });
+    } catch (err) {
+      return { ok: false, output: `回滚失败：${typeof err === "string" ? err : String(err)}` };
+    }
   }
 
   // MCP 工具走独立通道：mcp__服务__工具

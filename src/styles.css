@@ -2431,3 +2431,48 @@ button {
 .mcp-tools .msg-attachment {
   font-family: var(--mono);
 }
+
+/* ---------------- 任务清单面板 ---------------- */
+
+.todo-panel {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg-elev);
+  padding: 8px 12px;
+  margin-bottom: 4px;
+}
+
+.todo-title {
+  font-size: 10.8px;
+  color: var(--text-faint);
+  margin-bottom: 5px;
+}
+
+.todo-item {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-size: 12.6px;
+  color: var(--text-dim);
+  line-height: 1.7;
+}
+
+.todo-mark {
+  flex: none;
+  font-size: 11px;
+  width: 12px;
+  text-align: center;
+}
+
+.todo-done-text {
+  color: var(--text-faint);
+  text-decoration: line-through;
+}
+
+.todo-item.todo-in_progress {
+  color: var(--accent);
+}
+
+.todo-item.todo-in_progress .todo-mark {
+  animation: pulse 1.2s ease infinite;
+}

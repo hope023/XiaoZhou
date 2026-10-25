@@ -51,6 +51,12 @@ export interface ChatMessage {
   createdAt: number;
 }
 
+export interface TodoItem {
+  id: string;
+  content: string;
+  status: "pending" | "in_progress" | "done";
+}
+
 /** diff 预览的行级数据 */
 export interface DiffRow {
   type: "same" | "add" | "del";
@@ -80,6 +86,8 @@ export interface Session {
   mode?: AgentMode;
   /** 置顶的对话排在分组最前 */
   pinned?: boolean;
+  /** 当前任务清单（todo_write 工具维护） */
+  todos?: TodoItem[];
   /** 定时任务产生的对话 */
   source?: "schedule";
   scheduleId?: string;

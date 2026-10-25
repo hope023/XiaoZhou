@@ -67,9 +67,17 @@ export function toApiMessages(
   mode?: AgentMode,
   guide?: string,
   skills?: string,
-  memory?: string
+  memory?: string,
+  todos?: { content: string; status: "pending" | "in_progress" | "done" }[]
 ): ApiMessage[] {
   let system = buildSystemPrompt(settings, workspace, mode, guide);
+  if (todos && todos.length > 0) {
+    const lines = todos.map(
+      (item) =>
+        `- [${item.status === "done" ? "x" : item.status === "in_progress" ? "~" : " "}] ${item.content}`
+    );
+    system += `\n\n当前任务清单（用 todo_write 维护状态）：\n${lines.join("\n")}`;
+  }
   if (memory && memory.trim()) {
     system += `\n\n${memory.trim()}\n对话中出现值得长期记住的信息时，主动调用 memory 工具记下来；记忆里的内容与用户当前指令冲突时，先提一句再按用户说的做。`;
   }
@@ -164,6 +172,10 @@ export interface AgentRunOptions {
   sessionTitle?: string;
   /** 实时把助手消息的中间状态推给界面 */
   onAssistant: (patch: Partial<ChatMessage>) => void;
+  /** todo_write 更新任务清单 */
+  onTodos?: (items: { id: string; content: string; status: "pending" | "in_progress" | "done" }[]) => void;
+  /** 当前任务清单，注入 system prompt 让模型保持焦点 */
+  todos?: { content: string; status: "pending" | "in_progress" | "done" }[];
   /** 关闭自动批准时，执行命令前先问用户一句；带 diff 时展示变更预览 */
   requestApproval?: (info: {
     name: string;
@@ -495,7 +507,8 @@ export async function runAgent(options: AgentRunOptions): Promise<void> {
     mode,
     guide,
     skillList,
-    memoryNote || undefined
+    memoryNote || undefined,
+    options.todos
   );
   const totalCost = rawMessages.reduce((sum, msg) => sum + messageCost(msg), 0);
   const apiMessages =
@@ -713,6 +726,11 @@ export async function runAgent(options: AgentRunOptions): Promise<void> {
         onOutput: (line) => {
           // 命令边跑边显示，跑完再用完整输出覆盖
           result.output = result.output ? `${result.output}\n${line}` : line;
+          push();
+        },
+        onTodos: (items) => {
+          options.onTodos?.(items);
+          result.output = `清单已更新（共 ${items.length} 项，已完成 ${items.filter((t) => t.status === "done").length}）`;
           push();
         },
       });
