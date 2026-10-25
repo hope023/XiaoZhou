@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { MODES } from "../modes";
@@ -31,14 +31,9 @@ export function SettingsPanel({ settings, schedules, onSchedulesChange, focusSch
   const [draft, setDraft] = useState<Settings>(settings);
   const [showKey, setShowKey] = useState(false);
   const [workspaceOk, setWorkspaceOk] = useState<boolean | null>(null);
-  const bodyRef = useRef<HTMLDivElement>(null);
-
-  // 从侧栏「定时任务」进来时，直接滚到那一区
-  useEffect(() => {
-    if (!focusSchedules) return;
-    const el = bodyRef.current?.querySelector("#schedule-group");
-    el?.scrollIntoView({ block: "start" });
-  }, [focusSchedules]);
+  const [tab, setTab] = useState<"general" | "model" | "schedule">(
+    focusSchedules ? "schedule" : "general"
+  );
 
   const patch = (part: Partial<Settings>) => setDraft((prev) => ({ ...prev, ...part }));
 
@@ -88,7 +83,27 @@ export function SettingsPanel({ settings, schedules, onSchedulesChange, focusSch
           </button>
         </div>
 
-        <div className="settings-body" ref={bodyRef}>
+        <div className="settings-tabs">
+          {(
+            [
+              ["general", "通用设置"],
+              ["model", "模型设置"],
+              ["schedule", "定时任务"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              className={`settings-tab ${tab === value ? "active" : ""}`}
+              onClick={() => setTab(value)}
+              type="button"
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {tab === "general" && (
+        <div className="settings-body">
           <section className="field-group">
             <div className="group-label">通用设置</div>
 
@@ -173,7 +188,11 @@ export function SettingsPanel({ settings, schedules, onSchedulesChange, focusSch
               </span>
             </div>
           </section>
+        </div>
+        )}
 
+        {tab === "model" && (
+        <div className="settings-body">
           <section className="field-group">
             <div className="group-label">模型设置</div>
 
@@ -258,8 +277,12 @@ export function SettingsPanel({ settings, schedules, onSchedulesChange, focusSch
               </span>
             </div>
           </section>
+        </div>
+        )}
 
-          <section className="field-group" id="schedule-group">
+        {tab === "schedule" && (
+        <div className="settings-body">
+          <section className="field-group">
             <div className="group-label">定时任务设置</div>
             <ScheduleManager
               schedules={schedules}
@@ -268,6 +291,7 @@ export function SettingsPanel({ settings, schedules, onSchedulesChange, focusSch
             />
           </section>
         </div>
+        )}
 
         <div className="settings-foot">
           <button className="ghost-btn wide" onClick={onClose}>
