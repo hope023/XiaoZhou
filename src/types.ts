@@ -132,6 +132,10 @@ export interface Settings {
   maxRounds: number;
   /** 全局呼出快捷键，如 alt+space、ctrl+shift+z */
   toggleShortcut: string;
+  /** 界面字体大小（px），以 14px 为基准整体缩放 */
+  fontSize: number;
+  /** 界面字体样式：default = 系统默认；smiley = 得意黑 Smiley Sans */
+  fontFamily: "default" | "smiley";
 }
 
 /** 多模态内容块：文本或图片（data URL） */

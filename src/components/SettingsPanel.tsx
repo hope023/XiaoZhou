@@ -236,6 +236,58 @@ export function SettingsPanel({ settings, schedules, onSchedulesChange, initialT
             </div>
 
             <div className="field">
+              <label>界面字体大小</label>
+              <input
+                className="slider"
+                type="range"
+                min={12}
+                max={20}
+                step={0.5}
+                value={draft.fontSize}
+                onChange={(event) => patch({ fontSize: Number(event.target.value) })}
+              />
+              <div className="slider-labels">
+                <span>12px</span>
+                <span className="field-value">{draft.fontSize}px</span>
+                <span>20px</span>
+              </div>
+              <span className="field-hint">
+                整个界面（消息、侧栏、代码）按比例缩放，默认 15px，比旧版大一号。保存后立即生效
+              </span>
+            </div>
+
+            <div className="field">
+              <label>界面字体样式</label>
+              <div className="preset-row">
+                <button
+                  className={`preset ${draft.fontFamily === "default" ? "active" : ""}`}
+                  onClick={() => patch({ fontFamily: "default" })}
+                >
+                  系统默认
+                </button>
+                <button
+                  className={`preset ${draft.fontFamily === "smiley" ? "active" : ""}`}
+                  onClick={() => patch({ fontFamily: "smiley" })}
+                >
+                  得意黑
+                </button>
+              </div>
+              <div
+                className="font-preview"
+                style={
+                  draft.fontFamily === "smiley"
+                    ? { fontFamily: '"Smiley Sans", var(--sans)' }
+                    : undefined
+                }
+              >
+                小舟 Xiaozhou —— 让 AI 帮你干活 0123456789
+              </div>
+              <span className="field-hint">
+                得意黑（Smiley Sans）为开源免费商用字体，已内置在应用里，离线可用；代码块仍使用等宽字体
+              </span>
+            </div>
+
+            <div className="field">
               <label>全局呼出快捷键</label>
               <input
                 value={draft.toggleShortcut}

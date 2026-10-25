@@ -229,6 +229,17 @@ export default function App() {
     saveSettings(settings);
   }, [settings]);
 
+  // 字体大小：以 14px 为基准整体缩放界面（页面级 zoom，文字、图标一起缩放，渲染清晰）
+  useEffect(() => {
+    const scale = Math.max(0.85, Math.min(1.6, (settings.fontSize || 14) / 14));
+    document.documentElement.style.zoom = String(scale);
+  }, [settings.fontSize]);
+
+  // 字体样式：得意黑通过 html class 切换，CSS 里接管界面字体
+  useEffect(() => {
+    document.documentElement.classList.toggle("font-smiley", settings.fontFamily === "smiley");
+  }, [settings.fontFamily]);
+
   useEffect(() => {
     if (!booted || !activeId) return;
     const timer = setTimeout(() => saveSessions(sessions, activeId), 400);
