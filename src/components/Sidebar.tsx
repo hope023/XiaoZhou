@@ -101,6 +101,14 @@ export function Sidebar({
         新建对话
       </button>
 
+      <button className="new-chat schedule-entry" onClick={onOpenSchedules} title="定时任务">
+        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+          <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.3" fill="none" />
+          <path d="M8 4.6V8l2.4 1.6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" fill="none" />
+        </svg>
+        定时任务
+      </button>
+
       <div className="session-search">
         <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
           <circle cx="7" cy="7" r="4" stroke="currentColor" strokeWidth="1.3" fill="none" />
@@ -210,13 +218,6 @@ export function Sidebar({
       </div>
 
       <div className="sidebar-foot">
-        <button className="settings-btn" onClick={onOpenSchedules} title="定时任务">
-          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-            <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.2" fill="none" />
-            <path d="M8 4.6V8l2.4 1.6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" fill="none" />
-          </svg>
-          <span className="settings-model">定时任务</span>
-        </button>
         <button className="settings-btn" onClick={onOpenSettings} title="设置 (Ctrl+,)">
           <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
             <circle cx="8" cy="8" r="2.1" stroke="currentColor" strokeWidth="1.1" fill="none" />
