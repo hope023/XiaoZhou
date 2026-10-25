@@ -30,6 +30,8 @@ reqwest = { version = "0.12", default-features = false, features = [
 ] }
 tokio = { version = "1", features = ["process", "time", "io-util", "rt", "macros"] }
 futures-util = "0.3"
+tauri-plugin-clipboard-manager = "2.5.0"
+tauri-plugin-opener = "2.7.2"
 
 [profile.release]
 codegen-units = 16

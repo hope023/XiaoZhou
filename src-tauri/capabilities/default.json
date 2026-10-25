@@ -19,6 +19,9 @@
     "core:window:allow-set-focus",
     "global-shortcut:allow-register",
     "global-shortcut:allow-unregister",
-    "global-shortcut:allow-is-registered"
+    "global-shortcut:allow-is-registered",
+    "clipboard-manager:allow-write-text",
+    "clipboard-manager:allow-read-text",
+    "opener:allow-open-url"
   ]
 }

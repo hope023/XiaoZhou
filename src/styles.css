@@ -1522,6 +1522,57 @@ button {
   background: var(--bg-soft);
 }
 
+/* ---------------- 右键菜单 ---------------- */
+
+.ctx-menu {
+  position: fixed;
+  min-width: 168px;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 4px;
+  z-index: 90;
+  animation: pop-in 0.12s ease;
+  user-select: none;
+}
+
+.ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  text-align: left;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  font-size: 12.4px;
+  color: var(--text);
+  transition: background 0.1s;
+}
+
+.ctx-item:hover:not(:disabled) {
+  background: var(--bg-soft);
+}
+
+.ctx-item:disabled {
+  color: var(--text-faint);
+  opacity: 0.55;
+  cursor: default;
+}
+
+.ctx-label {
+  flex: 1;
+}
+
+.ctx-shortcut {
+  flex: none;
+  font-size: 10.6px;
+  color: var(--text-faint);
+  font-family: var(--mono);
+}
+
 /* ---------------- 命令确认 ---------------- */
 
 .confirm-panel {

@@ -7,10 +7,13 @@ import {
   sendNotification,
 } from "@tauri-apps/plugin-notification";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
+import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import logo from "./assets/logo.png";
 import { Composer } from "./components/Composer";
 import { ConfirmDialog } from "./components/ConfirmDialog";
+import { ContextMenu, type CtxMenuItem } from "./components/ContextMenu";
 import { MessageItem } from "./components/MessageItem";
 import { SessionTools } from "./components/SessionTools";
 import { SettingsPanel } from "./components/SettingsPanel";
@@ -65,6 +68,120 @@ async function expandRefs(text: string, workspace: string) {
   return attachments;
 }
 
+/** 对输入框替换选区并让 React 感知（setRangeText 不触发 input 事件，需手动派发） */
+function setEditableValue(
+  el: HTMLInputElement | HTMLTextAreaElement,
+  value: string,
+  start: number,
+  end: number
+) {
+  el.focus();
+  el.setRangeText(value, start, end, "end");
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+/** 按右键位置上下文组装菜单项；返回空数组表示只拦截不弹菜单 */
+function buildContextMenu(event: MouseEvent): CtxMenuItem[] {
+  const target = event.target as HTMLElement;
+  const items: CtxMenuItem[] = [];
+  const editable = target.closest("input, textarea") as
+    | HTMLInputElement
+    | HTMLTextAreaElement
+    | null;
+
+  // 1. 输入框 / 文本域：剪切、复制、粘贴、全选
+  if (editable && !editable.readOnly && !editable.disabled) {
+    const start = editable.selectionStart ?? 0;
+    const end = editable.selectionEnd ?? 0;
+    const selected = editable.value.slice(start, end);
+    const tail = editable.value.length;
+    items.push(
+      {
+        label: "剪切",
+        shortcut: "Ctrl+X",
+        disabled: !selected,
+        action: () => {
+          void writeText(selected);
+          setEditableValue(editable, "", start, end);
+        },
+      },
+      {
+        label: "复制",
+        shortcut: "Ctrl+C",
+        disabled: !selected,
+        action: () => void writeText(selected),
+      },
+      {
+        label: "粘贴",
+        shortcut: "Ctrl+V",
+        action: () => {
+          void readText()
+            .then((text) => {
+              if (text) {
+                setEditableValue(editable, text, editable.selectionStart ?? tail, editable.selectionEnd ?? tail);
+              }
+            })
+            .catch(() => {});
+        },
+      },
+      {
+        label: "全选",
+        shortcut: "Ctrl+A",
+        disabled: !editable.value,
+        action: () => {
+          editable.focus();
+          editable.select();
+        },
+      }
+    );
+    return items;
+  }
+
+  // 2. 链接：在浏览器打开、复制地址
+  const link = target.closest(".md-link") as HTMLElement | null;
+  const href = link?.dataset.href;
+  if (href) {
+    items.push(
+      { label: "在浏览器打开", action: () => void openUrl(href).catch(() => {}) },
+      { label: "复制链接地址", action: () => void writeText(href) }
+    );
+  }
+
+  // 3. 代码块：整体复制
+  const codeWrap = target.closest(".md-code-wrap");
+  if (codeWrap) {
+    const code = codeWrap.querySelector("code")?.textContent ?? "";
+    if (code) {
+      items.push({ label: "复制代码", action: () => void writeText(code) });
+    }
+  }
+
+  // 4. 有选区：复制选中文字
+  const selection = window.getSelection()?.toString();
+  if (selection) {
+    items.push({
+      label: "复制",
+      shortcut: "Ctrl+C",
+      action: () => void writeText(selection),
+    });
+  }
+
+  // 5. 消息区域且没有更具体的动作：复制整条消息文本
+  if (items.length === 0) {
+    const msg = target.closest(".msg");
+    if (msg) {
+      const text =
+        msg.querySelector(".msg-bubble")?.textContent ??
+        [...msg.querySelectorAll(".md")].map((node) => node.textContent).join("\n\n");
+      if (text.trim()) {
+        items.push({ label: "复制消息", action: () => void writeText(text) });
+      }
+    }
+  }
+
+  return items;
+}
+
 /** 发系统通知：定时任务完成/失败时提醒 */
 async function notify(title: string, body: string) {
   try {
@@ -87,6 +204,20 @@ export default function App() {
   const [streamingIds, setStreamingIds] = useState<Set<string>>(new Set());
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; items: CtxMenuItem[] } | null>(
+    null
+  );
+
+  // 右键统一接管：屏蔽 WebView2 默认浏览器菜单，按上下文弹应用菜单
+  useEffect(() => {
+    const onContextMenu = (event: MouseEvent) => {
+      event.preventDefault();
+      const items = buildContextMenu(event);
+      setCtxMenu(items.length ? { x: event.clientX, y: event.clientY, items } : null);
+    };
+    window.addEventListener("contextmenu", onContextMenu);
+    return () => window.removeEventListener("contextmenu", onContextMenu);
+  }, []);
   /** 打开设置面板时直接落到哪个页签 */
   const [initialTab, setInitialTab] = useState<"general" | "model" | "schedule" | "mcp">("general");
   /** 拖进窗口的文件，作为附件随下一条消息发出 */
@@ -881,6 +1012,10 @@ export default function App() {
           onApprove={() => settleApproval(true)}
           onReject={() => settleApproval(false)}
         />
+      )}
+
+      {ctxMenu && (
+        <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={ctxMenu.items} onClose={() => setCtxMenu(null)} />
       )}
     </div>
   );

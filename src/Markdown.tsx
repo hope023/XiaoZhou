@@ -78,6 +78,7 @@ function inline(text: string, keyBase: string): ReactNode[] {
           <span
             className="md-link"
             key={key}
+            data-href={link[2]}
             title={`${link[2]}（点击复制）`}
             onClick={() => {
               navigator.clipboard?.writeText(link[2]).catch(() => {});
