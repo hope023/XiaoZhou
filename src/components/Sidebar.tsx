@@ -14,6 +14,7 @@ interface Props {
   onDelete: (id: string) => void;
   onExport: (id: string) => void;
   onOpenSettings: () => void;
+  onOpenSchedules: () => void;
 }
 
 function baseName(path: string): string {
@@ -35,6 +36,7 @@ export function Sidebar({
   onDelete,
   onExport,
   onOpenSettings,
+  onOpenSchedules,
 }: Props) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
@@ -208,6 +210,13 @@ export function Sidebar({
       </div>
 
       <div className="sidebar-foot">
+        <button className="settings-btn" onClick={onOpenSchedules} title="定时任务">
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+            <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.2" fill="none" />
+            <path d="M8 4.6V8l2.4 1.6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" fill="none" />
+          </svg>
+          <span className="settings-model">定时任务</span>
+        </button>
         <button className="settings-btn" onClick={onOpenSettings} title="设置 (Ctrl+,)">
           <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
             <circle cx="8" cy="8" r="2.1" stroke="currentColor" strokeWidth="1.1" fill="none" />

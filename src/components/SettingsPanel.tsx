@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { MODES } from "../modes";
@@ -9,6 +9,8 @@ interface Props {
   settings: Settings;
   schedules: Schedule[];
   onSchedulesChange: (next: Schedule[]) => void;
+  /** 打开时滚动到定时任务区 */
+  focusSchedules?: boolean;
   onSave: (settings: Settings) => void;
   onClose: () => void;
 }
@@ -25,10 +27,18 @@ const PRESETS = [
   { label: "OpenAI", baseUrl: "https://api.openai.com", model: "gpt-4o-mini" },
 ];
 
-export function SettingsPanel({ settings, schedules, onSchedulesChange, onSave, onClose }: Props) {
+export function SettingsPanel({ settings, schedules, onSchedulesChange, focusSchedules, onSave, onClose }: Props) {
   const [draft, setDraft] = useState<Settings>(settings);
   const [showKey, setShowKey] = useState(false);
   const [workspaceOk, setWorkspaceOk] = useState<boolean | null>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+
+  // 从侧栏「定时任务」进来时，直接滚到那一区
+  useEffect(() => {
+    if (!focusSchedules) return;
+    const el = bodyRef.current?.querySelector("#schedule-group");
+    el?.scrollIntoView({ block: "start" });
+  }, [focusSchedules]);
 
   const patch = (part: Partial<Settings>) => setDraft((prev) => ({ ...prev, ...part }));
 
@@ -78,7 +88,7 @@ export function SettingsPanel({ settings, schedules, onSchedulesChange, onSave, 
           </button>
         </div>
 
-        <div className="settings-body">
+        <div className="settings-body" ref={bodyRef}>
           <section className="field-group">
             <div className="group-label">模型接口</div>
 
@@ -249,7 +259,7 @@ export function SettingsPanel({ settings, schedules, onSchedulesChange, onSave, 
             </div>
           </section>
 
-          <section className="field-group">
+          <section className="field-group" id="schedule-group">
             <div className="group-label">定时任务</div>
             <ScheduleManager
               schedules={schedules}

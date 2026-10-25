@@ -81,6 +81,8 @@ export default function App() {
   const [streamingIds, setStreamingIds] = useState<Set<string>>(new Set());
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  /** 打开设置面板时是否直接定位到定时任务区 */
+  const [focusSchedules, setFocusSchedules] = useState(false);
   const [maximized, setMaximized] = useState(false);
   const [pendingApproval, setPendingApproval] = useState<{
     summary: string;
@@ -619,7 +621,14 @@ export default function App() {
           onNew={newSession}
           onDelete={deleteSession}
           onExport={exportSession}
-          onOpenSettings={() => setSettingsOpen(true)}
+          onOpenSettings={() => {
+            setFocusSchedules(false);
+            setSettingsOpen(true);
+          }}
+          onOpenSchedules={() => {
+            setFocusSchedules(true);
+            setSettingsOpen(true);
+          }}
         />
 
         <main className="chat">
@@ -697,6 +706,7 @@ export default function App() {
           settings={settings}
           schedules={schedules}
           onSchedulesChange={setSchedules}
+          focusSchedules={focusSchedules}
           onSave={(next) => {
             setSettings(next);
             setSettingsOpen(false);
