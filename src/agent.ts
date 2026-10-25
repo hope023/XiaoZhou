@@ -66,9 +66,13 @@ export function toApiMessages(
   workspace: string,
   mode?: AgentMode,
   guide?: string,
-  skills?: string
+  skills?: string,
+  memory?: string
 ): ApiMessage[] {
   let system = buildSystemPrompt(settings, workspace, mode, guide);
+  if (memory && memory.trim()) {
+    system += `\n\n${memory.trim()}\n对话中出现值得长期记住的信息时，主动调用 memory 工具记下来；记忆里的内容与用户当前指令冲突时，先提一句再按用户说的做。`;
+  }
   if (skills && skills.trim()) {
     system += `\n\n可用技能（任务与描述匹配时，先用 use_skill 拿到详细指令再动手）：\n${skills.trim()}`;
   }
@@ -451,6 +455,22 @@ export async function runAgent(options: AgentRunOptions): Promise<void> {
     /* 没有约定文件就算了 */
   }
 
+  // 长期记忆：两级内容注入 system prompt
+  let memoryNote = "";
+  try {
+    const memory = await invoke<{ user: string; project: string }>("memory_read", {
+      root: workspace,
+    });
+    const sections: string[] = [];
+    if (memory.user?.trim()) sections.push(`【用户级】\n${memory.user.trim()}`);
+    if (memory.project?.trim()) sections.push(`【项目级·当前目录】\n${memory.project.trim()}`);
+    if (sections.length > 0) {
+      memoryNote = `你此前主动记下的长期记忆（用户偏好、项目约定等）：\n${sections.join("\n\n")}`;
+    }
+  } catch {
+    /* 没有记忆就算了 */
+  }
+
   // 技能清单：名字 + 描述列进系统提示，正文由 use_skill 按需取
   let skillList: string | undefined;
   try {
@@ -468,7 +488,15 @@ export async function runAgent(options: AgentRunOptions): Promise<void> {
   }
 
   const budget = Math.max(4000, settings.contextBudget || 24000);
-  const rawMessages = toApiMessages(options.history, settings, workspace, mode, guide, skillList);
+  const rawMessages = toApiMessages(
+    options.history,
+    settings,
+    workspace,
+    mode,
+    guide,
+    skillList,
+    memoryNote || undefined
+  );
   const totalCost = rawMessages.reduce((sum, msg) => sum + messageCost(msg), 0);
   const apiMessages =
     totalCost > budget
@@ -621,7 +649,11 @@ export async function runAgent(options: AgentRunOptions): Promise<void> {
       // 只读模式下即使模型硬要调用被禁的工具，也在这里挡住；
       // MCP 工具能力未知，只读模式一律不给
       const isMcp = name.startsWith("mcp__");
-      if (isMcp ? mode === "readonly" : !permission.tools.includes(name)) {
+      const memoryWriteOnly =
+        name === "memory" &&
+        mode === "readonly" &&
+        parseArgs(rawArgs).action !== "list";
+      if (memoryWriteOnly || (isMcp ? mode === "readonly" : !permission.tools.includes(name))) {
         result.ok = false;
         result.output = `现在是「${permission.label}」模式，不能调用 ${name}。需要的话请用户切到「标准」或「放开」。`;
         result.status = "done";

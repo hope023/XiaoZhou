@@ -28,6 +28,7 @@ pub fn run() {
             tools::save_schedules,
             tools::write_export,
             tools::check_update,
+            tools::memory_read,
             mcp::mcp_load_config,
             mcp::mcp_save_config,
             mcp::mcp_connect,

@@ -8,8 +8,8 @@ export interface ModeInfo {
   tools: string[];
 }
 
-// use_skill 只是读技能指令，三种模式都放开
-const READ_TOOLS = ["list_dir", "read_file", "search_text", "glob", "use_skill"];
+// use_skill 只是读技能指令，三种模式都放开；memory 写入按 action 在执行层细分
+const READ_TOOLS = ["list_dir", "read_file", "search_text", "glob", "use_skill", "memory"];
 const WRITE_TOOLS = [...READ_TOOLS, "edit_file", "write_file", "undo_last", "run_command"];
 
 export const MODES: ModeInfo[] = [

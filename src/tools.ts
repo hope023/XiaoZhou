@@ -180,6 +180,30 @@ export const TOOL_SPECS = [
   {
     type: "function",
     function: {
+      name: "memory",
+      description:
+        "长期记忆：记住 / 查询 / 删除跨对话的事实（用户偏好、项目约定、反复出现的需求）。值得记的：用户明确说「以后都…」「记住」的偏好、项目稳定约定、踩过的坑。不要记：一次性任务的临时信息。与用户当前要求冲突时，先说一句再更新记忆。",
+      parameters: {
+        type: "object",
+        properties: {
+          action: {
+            type: "string",
+            description: "add = 记住一条；list = 列出；remove = 删除包含关键词的条目；clear = 清空",
+          },
+          scope: {
+            type: "string",
+            description: "user = 用户级（跨所有项目）；project = 当前项目。不填默认 project",
+          },
+          content: { type: "string", description: "add 时要记的一句话，不要换行" },
+          keyword: { type: "string", description: "remove 时匹配要删条目的关键词" },
+        },
+        required: ["action"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "use_skill",
       description:
         "调用一个已安装的技能，返回该技能的详细指令。系统提示里列出了可用技能及其适用场景；任务与某个技能的描述匹配时，先调用它拿到指令再干活。",
@@ -214,6 +238,8 @@ export function toolLabel(name: string): string {
       return "执行命令";
     case "use_skill":
       return "调用技能";
+    case "memory":
+      return "长期记忆";
     default:
       if (name.startsWith("mcp__")) {
         const [, server, tool] = name.split("__");
@@ -252,6 +278,11 @@ export function summarizeArgs(name: string, rawArgs: string): string {
   if (name === "glob") return pick("pattern");
   if (name === "undo_last") return "";
   if (name === "use_skill") return pick("name");
+  if (name === "memory") {
+    const action = pick("action");
+    const detail = action === "add" ? pick("content") : action === "remove" ? pick("keyword") : "";
+    return `${action}${detail ? ` · ${detail}` : ""}${pick("scope") === "user" ? " · 用户级" : ""}`;
+  }
   if (name.startsWith("mcp__")) {
     const [, server, tool] = name.split("__");
     // 摘要带参数原文：权限记忆按精确匹配放行，参数变了还是要问

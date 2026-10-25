@@ -950,6 +950,7 @@ pub async fn run_tool(
         "glob" => tool_glob(&root, &args),
         "undo_last" => tool_undo_last(&root),
         "use_skill" => tool_use_skill(&root, &args),
+        "memory" => tool_memory(&root, &args),
         "run_command" => tool_run_command(&root, &args, &on_event).await,
         other => Ok(ToolOutcome::fail(format!("未知工具：{other}"))),
     };
@@ -1398,6 +1399,131 @@ pub async fn check_update() -> Result<UpdateInfo, String> {
         current,
         latest,
     })
+}
+
+
+/* ---------------- 长期记忆（zcode 式） ---------------- */
+
+/// 用户级：%APPDATA%/xiaozhou/memory.md；项目级：<workspace>/.xiaozhou/memory.md
+fn memory_path(root: &str, scope: &str) -> Result<PathBuf, String> {
+    match scope {
+        "user" => Ok(app_data_dir().join("memory.md")),
+        _ => Ok(root_of(root)?.join(STATE_DIR).join("memory.md")),
+    }
+}
+
+/// 给 system prompt 用的两段记忆原文
+#[tauri::command]
+pub fn memory_read(root: String) -> Value {
+    let user = std::fs::read_to_string(app_data_dir().join("memory.md"))
+        .unwrap_or_default();
+    let project = root_of(&root)
+        .ok()
+        .and_then(|r| std::fs::read_to_string(r.join(STATE_DIR).join("memory.md")).ok())
+        .unwrap_or_default();
+    json!({
+        "user": clip(user.trim().to_string(), 4_000),
+        "project": clip(project.trim().to_string(), 4_000),
+    })
+}
+
+fn tool_memory(root: &str, args: &Value) -> Result<ToolOutcome, String> {
+    let action = args.get("action").and_then(Value::as_str).unwrap_or("list");
+    let scope = args.get("scope").and_then(Value::as_str).unwrap_or("project");
+    if !matches!(scope, "user" | "project") {
+        return Ok(ToolOutcome::fail("scope 只能是 user 或 project"));
+    }
+    let path = memory_path(root, scope)?;
+    let label = if scope == "user" { "用户级" } else { "项目级" };
+
+    match action {
+        "add" => {
+            let content = args
+                .get("content")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .unwrap_or("");
+            if content.is_empty() {
+                return Ok(ToolOutcome::fail("content 不能为空"));
+            }
+            if content.contains('\n') {
+                return Ok(ToolOutcome::fail(
+                    "一次只记一条，content 里不要换行；多条分多次调用",
+                ));
+            }
+            if let Some(parent) = path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            let existing = std::fs::read_to_string(&path).unwrap_or_default();
+            let duplicated = existing.lines().any(|line| line.trim_end() == format!("- {content}").trim_end());
+            if duplicated {
+                return Ok(ToolOutcome::ok(format!("{label}记忆里已经有这条了：{content}")));
+            }
+            use std::io::Write;
+            let mut file = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&path)
+                .map_err(|e| format!("写入记忆失败：{e}"))?;
+            writeln!(file, "- {content}").map_err(|e| format!("写入记忆失败：{e}"))?;
+            Ok(ToolOutcome::ok(format!("已存入{label}记忆：{content}")))
+        }
+        "list" => {
+            let text = std::fs::read_to_string(&path).unwrap_or_default();
+            let trimmed = text.trim();
+            if trimmed.is_empty() {
+                Ok(ToolOutcome::ok(format!("{label}记忆目前是空的")))
+            } else {
+                Ok(ToolOutcome::ok(format!(
+                    "{label}记忆（共 {} 条）：\n{}",
+                    trimmed.lines().count(),
+                    clip(trimmed.to_string(), 4_000)
+                )))
+            }
+        }
+        "remove" => {
+            let keyword = args
+                .get("keyword")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .unwrap_or("");
+            if keyword.is_empty() {
+                return Ok(ToolOutcome::fail("remove 需要提供 keyword（匹配要删的行）"));
+            }
+            let text = std::fs::read_to_string(&path).unwrap_or_default();
+            let (kept, removed): (Vec<&str>, Vec<&str>) = text
+                .lines()
+                .partition(|line| !line.contains(keyword));
+            if removed.is_empty() {
+                return Ok(ToolOutcome::fail(format!(
+                    "{label}记忆里没有包含「{keyword}」的条目"
+                )));
+            }
+            if let Some(parent) = path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            std::fs::write(&path, kept.join("\n") + "\n").map_err(|e| format!("写入失败：{e}"))?;
+            let preview: Vec<String> = removed
+                .iter()
+                .map(|l| l.trim_start_matches("- ").to_string())
+                .collect();
+            Ok(ToolOutcome::ok(format!(
+                "已从{label}记忆删除 {} 条：{}",
+                removed.len(),
+                preview.join("；")
+            )))
+        }
+        "clear" => {
+            if let Some(parent) = path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            std::fs::write(&path, "").map_err(|e| format!("清空失败：{e}"))?;
+            Ok(ToolOutcome::ok(format!("{label}记忆已清空")))
+        }
+        other => Ok(ToolOutcome::fail(format!(
+            "未知 action：{other}（可用 add / list / remove / clear）"
+        ))),
+    }
 }
 
 #[cfg(test)]

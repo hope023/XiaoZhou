@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { MODES } from "../modes";
@@ -39,6 +39,22 @@ export function SettingsPanel({ settings, schedules, onSchedulesChange, initialT
   );
 
   const patch = (part: Partial<Settings>) => setDraft((prev) => ({ ...prev, ...part }));
+
+  const [memoryCount, setMemoryCount] = useState({ user: 0, project: 0 });
+  const countMemory = useCallback(() => {
+    invoke<{ user: string; project: string }>("memory_read", { root: draft.workspace })
+      .then((memory) =>
+        setMemoryCount({
+          user: memory.user?.trim() ? memory.user.trim().split("\n").length : 0,
+          project: memory.project?.trim() ? memory.project.trim().split("\n").length : 0,
+        })
+      )
+      .catch(() => setMemoryCount({ user: 0, project: 0 }));
+  }, [draft.workspace]);
+
+  useEffect(() => {
+    countMemory();
+  }, [countMemory]);
 
   const [checking, setChecking] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<{
@@ -231,6 +247,40 @@ export function SettingsPanel({ settings, schedules, onSchedulesChange, initialT
                 任何应用里按它呼出/隐藏小舟。写法：修饰键加号连键名，如 alt+space、
                 ctrl+shift+z、super+j。改完点「保存」立即生效；注册失败会弹系统通知
               </span>
+            </div>
+
+            <div className="field">
+              <label>长期记忆</label>
+              <div className="schedule-row">
+                <span className="field-hint">
+                  用户级 {memoryCount.user} 条 · 项目级 {memoryCount.project} 条。
+                  对话里说「记住…」，小舟会存下来并在此后所有对话中生效
+                </span>
+              </div>
+              <div className="schedule-row">
+                <button
+                  className="ghost-btn"
+                  disabled={memoryCount.user + memoryCount.project === 0}
+                  onClick={() => {
+                    if (!window.confirm("确定清空全部长期记忆？不可恢复。")) return;
+                    void invoke("run_tool", {
+                      name: "memory",
+                      args: { action: "clear", scope: "user" },
+                      root: draft.workspace,
+                    });
+                    void invoke("run_tool", {
+                      name: "memory",
+                      args: { action: "clear", scope: "project" },
+                      root: draft.workspace,
+                    }).then(() => countMemory());
+                  }}
+                >
+                  清空记忆
+                </button>
+                <span className="field-hint">
+                  存放在 %APPDATA%\xiaozhou\memory.md（用户级）和工作目录 .xiaozhou\memory.md（项目级），可以直接编辑
+                </span>
+              </div>
             </div>
 
             <div className="field">
