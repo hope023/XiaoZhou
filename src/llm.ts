@@ -3,6 +3,7 @@ import type { ApiMessage, ToolCall } from "./types";
 
 export interface LlmDone {
   content: string;
+  reasoning: string | null;
   toolCalls: ToolCall[];
   finishReason: string | null;
   usage: unknown;
@@ -10,6 +11,7 @@ export interface LlmDone {
 
 type LlmEvent =
   | { kind: "delta"; text: string }
+  | { kind: "reasoning"; text: string }
   | {
       kind: "done";
       content: string;
@@ -18,6 +20,8 @@ type LlmEvent =
       tool_calls?: ToolCall[];
       finishReason?: string | null;
       finish_reason?: string | null;
+      reasoning?: string | null;
+      reasoning_content?: string | null;
       usage?: unknown;
     }
   | { kind: "error"; message: string };
@@ -37,7 +41,8 @@ export interface StreamOptions {
  */
 export function streamChat(
   options: StreamOptions,
-  onDelta: (text: string) => void
+  onDelta: (text: string) => void,
+  onReasoning?: (text: string) => void
 ): Promise<LlmDone> {
   return new Promise<LlmDone>((resolve, reject) => {
     const channel = new Channel<LlmEvent>();
@@ -49,11 +54,16 @@ export function streamChat(
         onDelta(event.text);
         return;
       }
+      if (event.kind === "reasoning") {
+        onReasoning?.(event.text);
+        return;
+      }
       if (event.kind === "done") {
         settled = true;
         const calls = event.toolCalls ?? event.tool_calls ?? [];
         resolve({
           content: event.content,
+          reasoning: event.reasoning ?? event.reasoning_content ?? null,
           toolCalls: Array.isArray(calls) ? calls : [],
           finishReason: event.finishReason ?? event.finish_reason ?? null,
           usage: event.usage ?? null,

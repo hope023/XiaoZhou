@@ -4,13 +4,16 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { MODES } from "../modes";
 import type { Schedule, Settings } from "../types";
 import { ScheduleManager } from "./ScheduleManager";
+import { McpPanel } from "./McpPanel";
 
 interface Props {
   settings: Settings;
   schedules: Schedule[];
   onSchedulesChange: (next: Schedule[]) => void;
   /** 打开时直接落到某个页签（如从侧栏定时任务、模型切换菜单进来） */
-  initialTab?: "general" | "model" | "schedule";
+  initialTab?: "general" | "model" | "schedule" | "mcp";
+  /** 跳到某个会话（定时任务「上次运行」用） */
+  onOpenSession?: (sessionId: string) => void;
   onSave: (settings: Settings) => void;
   onClose: () => void;
 }
@@ -27,15 +30,42 @@ const PRESETS = [
   { label: "OpenAI", baseUrl: "https://api.openai.com", model: "gpt-4o-mini" },
 ];
 
-export function SettingsPanel({ settings, schedules, onSchedulesChange, initialTab, onSave, onClose }: Props) {
+export function SettingsPanel({ settings, schedules, onSchedulesChange, initialTab, onOpenSession, onSave, onClose }: Props) {
   const [draft, setDraft] = useState<Settings>(settings);
   const [showKey, setShowKey] = useState(false);
   const [workspaceOk, setWorkspaceOk] = useState<boolean | null>(null);
-  const [tab, setTab] = useState<"general" | "model" | "schedule">(
-    initialTab ?? "general"
+  const [tab, setTab] = useState<"general" | "model" | "schedule" | "mcp">(
+    initialTab === "mcp" ? "mcp" : (initialTab ?? "general")
   );
 
   const patch = (part: Partial<Settings>) => setDraft((prev) => ({ ...prev, ...part }));
+
+  const [checking, setChecking] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<{
+    hasUpdate: boolean;
+    latest: string;
+    current: string;
+    url: string;
+  } | null>(null);
+  const [updateError, setUpdateError] = useState("");
+  const checkUpdate = async () => {
+    setChecking(true);
+    setUpdateError("");
+    try {
+      const info = await invoke<{
+        hasUpdate: boolean;
+        latest: string;
+        current: string;
+        url: string;
+      }>("check_update");
+      setUpdateInfo(info);
+    } catch (err) {
+      setUpdateInfo(null);
+      setUpdateError(String(err));
+    } finally {
+      setChecking(false);
+    }
+  };
 
   // 目录一改就校验，填错路径自己能立刻看到
   useEffect(() => {
@@ -89,6 +119,7 @@ export function SettingsPanel({ settings, schedules, onSchedulesChange, initialT
               ["general", "通用设置"],
               ["model", "模型设置"],
               ["schedule", "定时任务"],
+              ["mcp", "MCP"],
             ] as const
           ).map(([value, label]) => (
             <button
@@ -186,6 +217,34 @@ export function SettingsPanel({ settings, schedules, onSchedulesChange, initialT
                 发给模型的历史上限（近似 token）。超出后自动摘要压缩最早的消息，
                 按模型上下文窗口的一半左右填比较稳，比如 32k 窗口填 16000
               </span>
+            </div>
+
+            <div className="field">
+              <label>关于</label>
+              <div className="schedule-row">
+                <button className="ghost-btn" onClick={() => void checkUpdate()} disabled={checking}>
+                  {checking ? "检查中…" : "检查更新"}
+                </button>
+                {updateInfo && (
+                  <span className="field-hint">
+                    {updateInfo.hasUpdate
+                      ? `有新版本 v${updateInfo.latest}（当前 v${updateInfo.current}），去 Release 页下载`
+                      : `已是最新版本 v${updateInfo.current}`}
+                  </span>
+                )}
+                {updateInfo?.hasUpdate && (
+                  <button
+                    className="ghost-btn"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(updateInfo.url).catch(() => {});
+                      setUpdateError("下载链接已复制到剪贴板");
+                    }}
+                  >
+                    复制下载链接
+                  </button>
+                )}
+                {updateError && <span className="field-hint">{updateError}</span>}
+              </div>
             </div>
           </section>
         </div>
@@ -322,7 +381,20 @@ export function SettingsPanel({ settings, schedules, onSchedulesChange, initialT
               schedules={schedules}
               defaultWorkspace={settings.workspace}
               onChange={onSchedulesChange}
+              onOpenRun={(sessionId) => {
+                onOpenSession?.(sessionId);
+                onClose();
+              }}
             />
+          </section>
+        </div>
+        )}
+
+        {tab === "mcp" && (
+        <div className="settings-body">
+          <section className="field-group">
+            <div className="group-label">MCP 服务器</div>
+            <McpPanel active={tab === "mcp"} />
           </section>
         </div>
         )}

@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { nextRunOf } from "../store";
-import { MODES } from "../modes";
-import type { AgentMode, Schedule } from "../types";
+import type { Schedule } from "../types";
 
 interface Props {
   schedules: Schedule[];
   defaultWorkspace: string;
   onChange: (next: Schedule[]) => void;
+  /** 跳到某次任务运行产生的会话 */
+  onOpenRun?: (sessionId: string) => void;
 }
 
 function describe(schedule: Schedule): string {
@@ -28,16 +29,16 @@ function fmtNext(ts?: number): string {
   return `${Math.round(hours / 24)} 天后`;
 }
 
-const MODE_LABEL: Record<AgentMode, string> = { readonly: "只读", standard: "标准", yolo: "放开" };
+const MODE_LABEL: Record<string, string> = { readonly: "只读", standard: "标准", yolo: "放开" };
 
-export function ScheduleManager({ schedules, defaultWorkspace, onChange }: Props) {
+export function ScheduleManager({ schedules, defaultWorkspace, onChange, onOpenRun }: Props) {
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
   const [prompt, setPrompt] = useState("");
   const [kind, setKind] = useState<"interval" | "daily">("interval");
   const [minutes, setMinutes] = useState(60);
   const [time, setTime] = useState("09:00");
-  const [mode, setMode] = useState<AgentMode>("readonly");
+  const [mode, setMode] = useState<"readonly" | "standard" | "yolo">("readonly");
   const [workspace, setWorkspace] = useState("");
 
   const create = () => {
@@ -55,7 +56,7 @@ export function ScheduleManager({ schedules, defaultWorkspace, onChange }: Props
           ? { kind: "interval", minutes: Math.max(5, Math.min(10080, minutes)) }
           : { kind: "daily", time: time || "09:00" },
       enabled: true,
-      nextRun: 0, // 下面立即算
+      nextRun: 0,
       createdAt: now,
     };
     schedule.nextRun = nextRunOf(schedule, now);
@@ -81,7 +82,6 @@ export function ScheduleManager({ schedules, defaultWorkspace, onChange }: Props
   const remove = (id: string) => onChange(schedules.filter((item) => item.id !== id));
 
   const runNow = (id: string) =>
-    // 把 nextRun 拨到现在，20 秒内的检查循环就会执行它
     onChange(schedules.map((item) => (item.id === id ? { ...item, nextRun: Date.now() - 1 } : item)));
 
   return (
@@ -122,12 +122,10 @@ export function ScheduleManager({ schedules, defaultWorkspace, onChange }: Props
             )}
           </div>
           <div className="schedule-row">
-            <select value={mode} onChange={(event) => setMode(event.target.value as AgentMode)}>
-              {MODES.map((m) => (
-                <option key={m.value} value={m.value}>
-                  {m.label}模式
-                </option>
-              ))}
+            <select value={mode} onChange={(event) => setMode(event.target.value as "readonly" | "standard" | "yolo")}>
+              <option value="readonly">只读模式</option>
+              <option value="standard">标准模式</option>
+              <option value="yolo">放开模式</option>
             </select>
             <input
               className="schedule-ws"
@@ -175,6 +173,11 @@ export function ScheduleManager({ schedules, defaultWorkspace, onChange }: Props
               <button onClick={() => runNow(schedule.id)} disabled={schedule.lastStatus === "running"} type="button">
                 立即跑
               </button>
+              {schedule.lastRunSessionId && (
+                <button onClick={() => onOpenRun?.(schedule.lastRunSessionId!)} type="button">
+                  上次运行
+                </button>
+              )}
               <button className="danger" onClick={() => remove(schedule.id)} type="button">
                 删除
               </button>

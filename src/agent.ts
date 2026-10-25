@@ -128,6 +128,7 @@ export function toApiMessages(
         if (part.text.trim()) buffer.push(part.text);
         continue;
       }
+      if (part.kind !== "tools") continue;
       const calls = part.callIds
         .map((id) => callById.get(id))
         .filter((call): call is ToolCall => !!call);
@@ -416,6 +417,27 @@ function validateArgs(name: string, args: Record<string, unknown>): string | nul
   return null;
 }
 
+/** 已连接的 MCP server 工具，转成 OpenAI 工具格式（mcp__服务__工具） */
+async function mcpToolSpecs(): Promise<
+  { type: "function"; function: { name: string; description: string; parameters: unknown } }[]
+> {
+  try {
+    const tools = await invoke<
+      { server: string; name: string; description: string; inputSchema: unknown }[]
+    >("mcp_all_tools");
+    return tools.map((tool) => ({
+      type: "function" as const,
+      function: {
+        name: `mcp__${tool.server}__${tool.name}`,
+        description: `[MCP·${tool.server}] ${tool.description || tool.name}`,
+        parameters: (tool.inputSchema as object) ?? { type: "object", properties: {} },
+      },
+    }));
+  } catch {
+    return [];
+  }
+}
+
 export async function runAgent(options: AgentRunOptions): Promise<void> {
   const { settings, workspace, mode, isAborted, onAssistant } = options;
   const permission = modeInfo(mode);
@@ -482,17 +504,23 @@ export async function runAgent(options: AgentRunOptions): Promise<void> {
   for (let round = 0; round < maxRounds; round++) {
     if (isAborted()) return;
 
+    const reasoningPart: MessagePart = { kind: "reasoning", id: newId(), text: "" };
     const textPart: MessagePart = { kind: "text", id: newId(), text: "" };
+    parts.push(reasoningPart);
     parts.push(textPart);
 
     let roundText = "";
+    let roundReasoning = "";
     const done = await streamChat(
       {
         baseUrl: settings.baseUrl,
         apiKey: settings.apiKey,
         model: settings.model,
         messages: apiMessages,
-        tools: TOOL_SPECS.filter((spec) => permission.tools.includes(spec.function.name)),
+        tools: [
+          ...TOOL_SPECS.filter((spec) => permission.tools.includes(spec.function.name)),
+          ...(mode === "readonly" ? [] : await mcpToolSpecs()),
+        ],
         temperature: settings.temperature,
       },
       (delta) => {
@@ -500,8 +528,15 @@ export async function runAgent(options: AgentRunOptions): Promise<void> {
         roundText += delta;
         textPart.text = roundText;
         push();
+      },
+      (delta) => {
+        if (isAborted()) return;
+        roundReasoning += delta;
+        reasoningPart.text = roundReasoning;
+        push();
       }
     );
+    // 等下统一在处理正文时清理空的 reasoning part
 
     if (isAborted()) return;
 
@@ -517,6 +552,14 @@ export async function runAgent(options: AgentRunOptions): Promise<void> {
       const index = parts.indexOf(textPart);
       if (index >= 0) parts.splice(index, 1);
       roundText = "";
+    }
+
+    const finalReasoning = done.reasoning || roundReasoning;
+    if (finalReasoning && finalReasoning.trim()) {
+      reasoningPart.text = finalReasoning;
+    } else {
+      const rIndex = parts.indexOf(reasoningPart);
+      if (rIndex >= 0) parts.splice(rIndex, 1);
     }
 
     const calls = done.toolCalls.filter((call) => call?.function?.name);
@@ -564,6 +607,7 @@ export async function runAgent(options: AgentRunOptions): Promise<void> {
       mode === "standard" &&
       !!options.requestApproval &&
       slots.some((slot) =>
+        slot.call.function.name.startsWith("mcp__") ||
         ["run_command", "write_file", "edit_file"].includes(slot.call.function.name)
       );
 
@@ -574,8 +618,10 @@ export async function runAgent(options: AgentRunOptions): Promise<void> {
       // 确认弹窗的来源标注：手动会话用它的标题
       const context = options.sessionTitle;
 
-      // 只读模式下即使模型硬要调用被禁的工具，也在这里挡住
-      if (!permission.tools.includes(name)) {
+      // 只读模式下即使模型硬要调用被禁的工具，也在这里挡住；
+      // MCP 工具能力未知，只读模式一律不给
+      const isMcp = name.startsWith("mcp__");
+      if (isMcp ? mode === "readonly" : !permission.tools.includes(name)) {
         result.ok = false;
         result.output = `现在是「${permission.label}」模式，不能调用 ${name}。需要的话请用户切到「标准」或「放开」。`;
         result.status = "done";
@@ -585,7 +631,8 @@ export async function runAgent(options: AgentRunOptions): Promise<void> {
 
       // 安全防护：标准模式必须有人工确认回调。定时任务没传回调，
       // 若放行就等于无人确认地跑命令/改文件——直接拒绝并指路
-      const needsGate = name === "run_command" || name === "write_file" || name === "edit_file";
+      const needsGate =
+        name === "run_command" || name === "write_file" || name === "edit_file" || isMcp;
       if (needsGate && mode === "standard" && !options.requestApproval) {
         result.ok = false;
         result.output = `这是后台任务，「标准」模式下不能${name === "run_command" ? "执行命令" : "修改文件"}（没有人在旁边确认）。请把任务的权限模式改成「只读」或「放开」。`;
@@ -597,7 +644,7 @@ export async function runAgent(options: AgentRunOptions): Promise<void> {
       // 标准模式：命令和文件改动都要先过用户这一关；放开模式直接跑
       if (mode === "standard" && options.requestApproval) {
         const needsAsk =
-          name === "run_command" || name === "write_file" || name === "edit_file";
+          name === "run_command" || name === "write_file" || name === "edit_file" || isMcp;
         if (needsAsk) {
           let diff: DiffData | undefined;
           if (name !== "run_command") {
@@ -620,7 +667,7 @@ export async function runAgent(options: AgentRunOptions): Promise<void> {
       }
 
       const parsed = parseArgs(rawArgs);
-      const argError = validateArgs(name, parsed);
+      const argError = name.startsWith("mcp__") ? null : validateArgs(name, parsed);
       if (argError) {
         result.ok = false;
         result.output = `参数不合法：${argError}。请修正后重新调用。`;

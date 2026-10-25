@@ -13,9 +13,12 @@ use tauri::ipc::Channel;
 pub enum LlmEvent {
     /// 正文增量
     Delta { text: String },
+    /// 思考内容增量（reasoning_content，DeepSeek R1 / GLM 等推理模型）
+    Reasoning { text: String },
     /// 本轮结束，带上完整正文与累积后的工具调用
     Done {
         content: String,
+        reasoning: Option<String>,
         tool_calls: Vec<Value>,
         finish_reason: Option<String>,
         usage: Option<Value>,
@@ -193,6 +196,10 @@ pub async fn llm_stream(
             .and_then(Value::as_str)
             .unwrap_or("")
             .to_string();
+        let reasoning = message
+            .get("reasoning_content")
+            .and_then(Value::as_str)
+            .map(str::to_string);
         let tool_calls = message
             .get("tool_calls")
             .and_then(Value::as_array)
@@ -209,6 +216,7 @@ pub async fn llm_stream(
         }
         let _ = on_event.send(LlmEvent::Done {
             content,
+            reasoning,
             tool_calls,
             finish_reason,
             usage: parsed.get("usage").cloned(),
@@ -219,6 +227,7 @@ pub async fn llm_stream(
     let mut stream = response.bytes_stream();
     let mut buffer = String::new();
     let mut content = String::new();
+    let mut reasoning: Option<String> = None;
     let mut tool_slots: Vec<Value> = Vec::new();
     let mut finish_reason: Option<String> = None;
     let mut usage: Option<Value> = None;
@@ -291,6 +300,16 @@ pub async fn llm_stream(
                     });
                 }
             }
+            if let Some(text) = delta.get("reasoning_content").and_then(Value::as_str) {
+                if !text.is_empty() {
+                    reasoning
+                        .get_or_insert_with(String::new)
+                        .push_str(text);
+                    let _ = on_event.send(LlmEvent::Reasoning {
+                        text: text.to_string(),
+                    });
+                }
+            }
             if let Some(calls) = delta.get("tool_calls").and_then(Value::as_array) {
                 for tc in calls {
                     merge_tool_call(&mut tool_slots, tc);
@@ -309,6 +328,7 @@ pub async fn llm_stream(
 
     let _ = on_event.send(LlmEvent::Done {
         content,
+        reasoning,
         tool_calls: tool_slots,
         finish_reason,
         usage,

@@ -2334,3 +2334,100 @@ button {
   background: var(--hover);
   color: var(--text-dim);
 }
+
+.composer-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.composer-usage {
+  flex: none;
+  font-size: 10.4px;
+  color: var(--text-faint);
+  font-family: var(--mono);
+}
+
+/* 会话项 hover 操作条 */
+.session-ops {
+  display: inline-flex;
+  gap: 1px;
+  flex: none;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.session-item:hover .session-ops {
+  opacity: 1;
+}
+
+.session-op {
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  padding: 2px;
+  border-radius: 4px;
+  display: grid;
+  place-items: center;
+  transition: color 0.12s, background 0.12s;
+}
+
+.session-op:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+
+.session-op.on {
+  color: var(--accent);
+}
+
+.session-op.danger:hover {
+  color: #dc2626;
+}
+
+.session-rename {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12.3px;
+  font-family: inherit;
+  padding: 2px 6px;
+  outline: none;
+}
+
+.confirm-remember {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--text-dim);
+  margin: 2px 0 4px;
+  cursor: pointer;
+}
+
+.mcp-name {
+  width: 130px;
+  flex: none;
+}
+
+.mcp-command {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 11.5px !important;
+}
+
+.mcp-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.mcp-tools .msg-attachment {
+  font-family: var(--mono);
+}

@@ -1,6 +1,93 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Session } from "../types";
 
+/** 会话项 hover 出现的操作按钮 */
+function SessionOps({
+  pinned,
+  onPin,
+  onRename,
+  onExport,
+  onDelete,
+}: {
+  pinned?: boolean;
+  onPin: () => void;
+  onRename: () => void;
+  onExport: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <span className="session-ops">
+      <button
+        className={`session-op ${pinned ? "on" : ""}`}
+        title={pinned ? "取消置顶" : "置顶"}
+        onClick={(event) => {
+          event.stopPropagation();
+          onPin();
+        }}
+      >
+        <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+          <path
+            d="M9.8 2.2l4 4-1.4 1.4-.9-.3-2.6 2.6.4 2.9-1.1 1.1-2.6-2.6L3 14l-1-1 2.7-2.6L2.1 7.8l1.1-1.1 2.9.4 2.6-2.6-.3-.9 1.4-1.4Z"
+            stroke="currentColor"
+            strokeWidth="1.1"
+            fill="none"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+      <button
+        className="session-op"
+        title="重命名"
+        onClick={(event) => {
+          event.stopPropagation();
+          onRename();
+        }}
+      >
+        <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+          <path
+            d="M11.3 2.6l2.1 2.1L5 13.1l-2.7.6.6-2.7 8.4-8.4Z"
+            stroke="currentColor"
+            strokeWidth="1.1"
+            fill="none"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+      <button
+        className="session-op"
+        title="导出为 Markdown"
+        onClick={(event) => {
+          event.stopPropagation();
+          onExport();
+        }}
+      >
+        <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+          <path
+            d="M8 2.6v7.2M8 9.8L5 6.9M8 9.8l3-2.9M3.4 11v1.6a1 1 0 0 0 1 1h7.2a1 1 0 0 0 1-1V11"
+            stroke="currentColor"
+            strokeWidth="1.3"
+            fill="none"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+      <button
+        className="session-op danger"
+        title="删除对话"
+        onClick={(event) => {
+          event.stopPropagation();
+          onDelete();
+        }}
+      >
+        <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+          <path d="M4.4 4.4l7.2 7.2M11.6 4.4l-7.2 7.2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+        </svg>
+      </button>
+    </span>
+  );
+}
+
 interface Props {
   sessions: Session[];
   activeId: string;
@@ -12,6 +99,8 @@ interface Props {
   onNew: () => void;
   onDelete: (id: string) => void;
   onExport: (id: string) => void;
+  onRename: (id: string, title: string) => void;
+  onPin: (id: string) => void;
   onOpenSettings: () => void;
   onOpenSchedules: () => void;
 }
@@ -33,11 +122,15 @@ export function Sidebar({
   onNew,
   onDelete,
   onExport,
+  onRename,
+  onPin,
   onOpenSettings,
   onOpenSchedules,
 }: Props) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
 
   const needle = query.trim().toLowerCase();
   const visible = needle
@@ -60,7 +153,10 @@ export function Sidebar({
     const list = [...map.entries()].map(([key, group]) => ({
       key,
       dir: group.dir,
-      items: [...group.items].sort((a, b) => b.updatedAt - a.updatedAt),
+      items: [...group.items].sort((a, b) => {
+        if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
+        return b.updatedAt - a.updatedAt;
+      }),
     }));
     return list.sort((a, b) => {
       const latest = (items: Session[]) => Math.max(...items.map((i) => i.updatedAt));
@@ -176,38 +272,41 @@ export function Sidebar({
                     onClick={() => onSelect(session.id)}
                   >
                     {streamingIds?.has(session.id) && <span className="session-live" title="执行中" />}
-                    <span className="session-title">{session.title}</span>
-                    <button
-                      className="session-export"
-                      title="导出为 Markdown"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onExport(session.id);
-                      }}
-                    >
-                      <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
-                        <path
-                          d="M8 2.6v7.2M8 9.8L5 6.9M8 9.8l3-2.9M3.4 11v1.6a1 1 0 0 0 1 1h7.2a1 1 0 0 0 1-1V11"
-                          stroke="currentColor"
-                          strokeWidth="1.3"
-                          fill="none"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
+                    {renamingId === session.id ? (
+                      <input
+                        className="session-rename"
+                        value={renameDraft}
+                        autoFocus
+                        spellCheck={false}
+                        onClick={(event) => event.stopPropagation()}
+                        onChange={(event) => setRenameDraft(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            onRename(session.id, renameDraft.trim() || session.title);
+                            setRenamingId(null);
+                          }
+                          if (event.key === "Escape") setRenamingId(null);
+                        }}
+                        onBlur={() => {
+                          onRename(session.id, renameDraft.trim() || session.title);
+                          setRenamingId(null);
+                        }}
+                      />
+                    ) : (
+                      <>
+                        <span className="session-title">{session.title}</span>
+                        <SessionOps
+                          pinned={session.pinned}
+                          onPin={() => onPin(session.id)}
+                          onRename={() => {
+                            setRenameDraft(session.title);
+                            setRenamingId(session.id);
+                          }}
+                          onExport={() => onExport(session.id)}
+                          onDelete={() => onDelete(session.id)}
                         />
-                      </svg>
-                    </button>
-                    <button
-                      className="session-del"
-                      title="删除对话"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onDelete(session.id);
-                      }}
-                    >
-                      <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
-                        <path d="M4.4 4.4l7.2 7.2M11.6 4.4l-7.2 7.2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-                      </svg>
-                    </button>
+                      </>
+                    )}
                   </div>
                 ))}
             </div>

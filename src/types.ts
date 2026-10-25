@@ -13,10 +13,11 @@ export interface ToolResult {
   status: "running" | "done";
 }
 
-/** 助手消息里按真实顺序排列的片段：一段话、或一轮工具调用 */
+/** 助手消息里按真实顺序排列的片段：一段话、一轮工具调用、或模型思考 */
 export type MessagePart =
   | { kind: "text"; id: string; text: string }
-  | { kind: "tools"; id: string; callIds: string[] };
+  | { kind: "tools"; id: string; callIds: string[] }
+  | { kind: "reasoning"; id: string; text: string };
 
 /** 本轮请求的 token 消耗（来自接口的 usage 字段） */
 export interface UsageInfo {
@@ -77,6 +78,8 @@ export interface Session {
   workspace?: string;
   /** 这个对话的权限模式；没设过就用设置里的默认模式 */
   mode?: AgentMode;
+  /** 置顶的对话排在分组最前 */
+  pinned?: boolean;
   /** 定时任务产生的对话 */
   source?: "schedule";
   scheduleId?: string;
@@ -102,6 +105,8 @@ export interface Schedule {
   nextRun?: number;
   /** 最近一次执行的结果摘要（通知用） */
   lastStatus?: "ok" | "fail" | "running";
+  /** 上次运行产生的会话，用于跳转查看 */
+  lastRunSessionId?: string;
   createdAt: number;
 }
 

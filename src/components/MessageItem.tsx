@@ -29,7 +29,15 @@ function parseThinking(
   return out;
 }
 
-function ThinkingBlock({ text, streaming }: { text: string; streaming?: boolean }) {
+function ThinkingBlock({
+  text,
+  streaming,
+  defaultLabel,
+}: {
+  text: string;
+  streaming?: boolean;
+  defaultLabel?: string;
+}) {
   const [open, setOpen] = useState(false);
   return (
     <details className={`think-box ${streaming ? "thinking" : ""}`} open={open}>
@@ -49,7 +57,9 @@ function ThinkingBlock({ text, streaming }: { text: string; streaming?: boolean 
           />
           <path d="M6.2 14.2h3.6" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
         </svg>
-        <span className="think-label">{streaming && !open ? "思考中…" : "思考过程"}</span>
+        <span className="think-label">
+          {streaming && !open ? "思考中…" : (defaultLabel ?? "思考过程")}
+        </span>
         <svg
           className={`think-chevron ${open ? "open" : ""}`}
           viewBox="0 0 16 16"
@@ -67,6 +77,11 @@ function ThinkingBlock({ text, streaming }: { text: string; streaming?: boolean 
   );
 }
 
+function fmt(n?: number): string {
+  if (!n) return "0";
+  return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+}
+
 interface Props {
   message: ChatMessage;
   streaming?: boolean;
@@ -80,14 +95,18 @@ interface Props {
   onBranch?: () => void;
 }
 
-function fmt(n?: number): string {
-  if (!n) return "0";
-  return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
-}
-
 export function MessageItem({ message, streaming, onUndo, onRetry, onEdit, onBranch }: Props) {
   const isUser = message.role === "user";
   const results = message.toolResults ?? [];
+  const [copied, setCopied] = useState(false);
+
+  const copyAll = () => {
+    navigator.clipboard
+      ?.writeText(message.content)
+      .catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
 
   const renderTools = (callIds: string[], key: string) => {
     const items = callIds
@@ -111,7 +130,7 @@ export function MessageItem({ message, streaming, onUndo, onRetry, onEdit, onBra
   const hasVisible =
     (hasParts &&
       message.parts!.some((part) =>
-        part.kind === "text" ? part.text.trim().length > 0 : part.callIds.length > 0
+        part.kind === "text" ? part.text.trim().length > 0 : part.kind === "tools" ? part.callIds.length > 0 : part.text.trim().length > 0
       )) ||
     message.content.trim().length > 0 ||
     results.length > 0;
@@ -177,6 +196,15 @@ export function MessageItem({ message, streaming, onUndo, onRetry, onEdit, onBra
                     )
                   )
                 ) : null
+              ) : part.kind === "reasoning" ? (
+                part.text.trim() ? (
+                  <ThinkingBlock
+                    key={part.id}
+                    text={part.text}
+                    streaming={streaming}
+                    defaultLabel="推理过程"
+                  />
+                ) : null
               ) : (
                 renderTools(part.callIds, part.id)
               )
@@ -205,11 +233,18 @@ export function MessageItem({ message, streaming, onUndo, onRetry, onEdit, onBra
           </div>
         )}
 
-        {!streaming && hasVisible && onRetry && (
+        {!streaming && hasVisible && (onRetry || message.content.trim()) && (
           <div className="msg-actions">
-            <button className="msg-action" onClick={onRetry} type="button">
-              重新生成
-            </button>
+            {message.content.trim() && (
+              <button className="msg-action" onClick={copyAll} type="button">
+                {copied ? "已复制" : "复制"}
+              </button>
+            )}
+            {onRetry && (
+              <button className="msg-action" onClick={onRetry} type="button">
+                重新生成
+              </button>
+            )}
           </div>
         )}
       </div>

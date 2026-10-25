@@ -37,6 +37,11 @@ import type {
   Settings,
 } from "./types";
 
+function fmtK(n?: number): string {
+  if (!n) return "0";
+  return n >= 1000 ? `${Math.round(n / 100) / 10}k` : String(n);
+}
+
 const SUGGESTIONS = [
   "看看当前目录里有什么",
   "帮我读一下 README，说说这个项目是干嘛的",
@@ -82,7 +87,9 @@ export default function App() {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   /** 打开设置面板时直接落到哪个页签 */
-  const [initialTab, setInitialTab] = useState<"general" | "model" | "schedule">("general");
+  const [initialTab, setInitialTab] = useState<"general" | "model" | "schedule" | "mcp">("general");
+  /** 拖进窗口的文件，作为附件随下一条消息发出 */
+  const [dragAttachments, setDragAttachments] = useState<{ path: string; content: string }[]>([]);
   const [maximized, setMaximized] = useState(false);
   const [pendingApproval, setPendingApproval] = useState<{
     summary: string;
@@ -148,10 +155,27 @@ export default function App() {
     const unlisten = win.onResized(() => {
       win.isMaximized().then(setMaximized).catch(() => {});
     });
+    // 拖文件进窗口 = 直接引用它
+    const unlistenDrag = win.onDragDropEvent((event) => {
+      if (event.payload.type !== "drop") return;
+      for (const path of event.payload.paths) {
+        invoke<{ path: string; content: string }>("read_reference", { root: workspace, path })
+          .then((attachment) =>
+            setDragAttachments((prev) =>
+              prev.some((a) => a.path === attachment.path) ? prev : [...prev, attachment]
+            )
+          )
+          .catch(() => {
+            void notify("没能引用这个文件", path);
+          });
+      }
+    });
     return () => {
       unlisten.then((fn) => fn()).catch(() => {});
+      unlistenDrag.then((fn) => fn()).catch(() => {});
     };
-  }, []);
+    // workspace 变化时重挂（read_reference 依赖它）
+  }, [workspace]);
 
   // 首次启动给个默认工作目录
   useEffect(() => {
@@ -284,6 +308,20 @@ export default function App() {
   const requestApproval = useCallback(
     (info: { name: string; summary: string; diff?: DiffData; context?: string }) =>
       new Promise<boolean>((resolve) => {
+        // 之前勾过「不再询问」的命令直接放行（命令与 MCP 工具按精确摘要匹配；文件改动不记）
+        if ((info.name === "run_command" || info.name.startsWith("mcp__")) && !info.diff) {
+          try {
+            const remembered: string[] = JSON.parse(
+              localStorage.getItem("xiaozhou.approved.v1") || "[]"
+            );
+            if (remembered.includes(info.summary)) {
+              resolve(true);
+              return;
+            }
+          } catch {
+            /* 忽略 */
+          }
+        }
         setPendingApproval({
           summary: info.summary,
           diff: info.diff,
@@ -295,9 +333,22 @@ export default function App() {
   );
 
   const settleApproval = useCallback(
-    (approved: boolean) => {
+    (approved: boolean, remember = false) => {
       setPendingApproval((current) => {
-        current?.resolve(approved);
+        if (current?.resolve) current.resolve(approved);
+        if (approved && remember && current) {
+          try {
+            const remembered: string[] = JSON.parse(
+              localStorage.getItem("xiaozhou.approved.v1") || "[]"
+            );
+            if (!remembered.includes(current.summary)) {
+              remembered.push(current.summary);
+              localStorage.setItem("xiaozhou.approved.v1", JSON.stringify(remembered.slice(-50)));
+            }
+          } catch {
+            /* 忽略 */
+          }
+        }
         return null;
       });
     },
@@ -335,7 +386,7 @@ export default function App() {
       const sessionId = activeId;
       const history = baseMessages ?? activeSession?.messages ?? [];
       // @ 引用的文件在发送时展开成附件，界面只显示 @路径
-      const attachments = await expandRefs(content, workspace);
+      const attachments = [...dragAttachments, ...(await expandRefs(content, workspace))];
       const userMessage: ChatMessage = {
         id: newId(),
         role: "user",
@@ -366,6 +417,7 @@ export default function App() {
 
       setDraft("");
       setImages([]);
+      setDragAttachments([]);
       setSessionStreaming(sessionId, true);
       abortMapRef.current.set(sessionId, false);
       stickRef.current = true;
@@ -399,6 +451,7 @@ export default function App() {
       workspace,
       mode,
       images,
+      dragAttachments,
       setSessionStreaming,
     ]
   );
@@ -534,7 +587,9 @@ export default function App() {
       const upcoming = nextRunOf(schedule, now);
       setSchedules((prev) =>
         prev.map((item) =>
-          item.id === schedule.id ? { ...item, lastRun: now, nextRun: upcoming, lastStatus: "running" } : item
+          item.id === schedule.id
+            ? { ...item, lastRun: now, nextRun: upcoming, lastStatus: "running", lastRunSessionId: sid }
+            : item
         )
       );
 
@@ -585,6 +640,20 @@ export default function App() {
     return () => clearInterval(timer);
   }, []);
 
+  const renameSession = useCallback((id: string, title: string) => {
+    setSessions((prev) =>
+      prev.map((session) => (session.id === id ? { ...session, title, updatedAt: Date.now() } : session))
+    );
+  }, []);
+
+  const pinSession = useCallback((id: string) => {
+    setSessions((prev) =>
+      prev.map((session) =>
+        session.id === id ? { ...session, pinned: !session.pinned, updatedAt: Date.now() } : session
+      )
+    );
+  }, []);
+
   /* ---------- 快捷键 ---------- */
 
   useEffect(() => {
@@ -620,6 +689,8 @@ export default function App() {
           onNew={newSession}
           onDelete={deleteSession}
           onExport={exportSession}
+          onRename={renameSession}
+          onPin={pinSession}
           onOpenSettings={() => {
             setInitialTab("general");
             setSettingsOpen(true);
@@ -689,6 +760,11 @@ export default function App() {
             onRemoveImage={(index) => setImages((prev) => prev.filter((_, i) => i !== index))}
             model={settings.model}
             models={settings.modelList}
+            contextUsage={(() => {
+              const lastUsage = messages.filter((m) => m.role === "assistant" && m.usage).at(-1)?.usage;
+              if (!lastUsage?.prompt) return undefined;
+              return `${fmtK(lastUsage.prompt)} / ${fmtK(settings.contextBudget || 24000)}`;
+            })()}
             onSelectModel={(model) => setSettings((prev) => ({ ...prev, model }))}
             onManageModels={() => {
               setInitialTab("model");
@@ -713,6 +789,9 @@ export default function App() {
           schedules={schedules}
           onSchedulesChange={setSchedules}
           initialTab={initialTab}
+          onOpenSession={(sessionId) => {
+            setActiveId(sessionId);
+          }}
           onSave={(next) => {
             setSettings(next);
             setSettingsOpen(false);

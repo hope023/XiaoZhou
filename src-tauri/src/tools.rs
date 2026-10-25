@@ -75,13 +75,13 @@ pub fn cancel_tool(run_id: String) {
 }
 
 impl ToolOutcome {
-    fn ok(output: impl Into<String>) -> Self {
+    pub fn ok(output: impl Into<String>) -> Self {
         Self {
             ok: true,
             output: output.into(),
         }
     }
-    fn fail(output: impl Into<String>) -> Self {
+    pub fn fail(output: impl Into<String>) -> Self {
         Self {
             ok: false,
             output: output.into(),
@@ -89,7 +89,7 @@ impl ToolOutcome {
     }
 }
 
-fn clip(s: String, max: usize) -> String {
+pub fn clip(s: String, max: usize) -> String {
     if s.chars().count() <= max {
         return s;
     }
@@ -970,7 +970,7 @@ pub async fn run_tool(
 /* ---------------- 会话落盘 / 审计 / 预览 / 文件引用 ---------------- */
 
 /// 应用数据目录：%APPDATA%/xiaozhou，会话和审计都放这里
-fn app_data_dir() -> PathBuf {
+pub fn app_data_dir() -> PathBuf {
     let base = std::env::var("APPDATA")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from(home_dir()));
@@ -1320,6 +1320,84 @@ pub fn write_export(path: String, content: String) -> Result<String, String> {
     }
     std::fs::write(&path, content).map_err(|e| format!("写入失败：{e}"))?;
     Ok(path)
+}
+
+
+/* ---------------- 检查更新 ---------------- */
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateInfo {
+    current: String,
+    latest: String,
+    has_update: bool,
+    url: String,
+    notes: String,
+}
+
+fn version_gt(a: &str, b: &str) -> bool {
+    let parse = |s: &str| -> Vec<u64> {
+        s.trim_start_matches('v')
+            .split('.')
+            .map(|part| part.split('-').next().unwrap_or("0").parse::<u64>().unwrap_or(0))
+            .collect()
+    };
+    let (a, b) = (parse(a), parse(b));
+    for i in 0..3 {
+        let av = a.get(i).copied().unwrap_or(0);
+        let bv = b.get(i).copied().unwrap_or(0);
+        if av != bv {
+            return av > bv;
+        }
+    }
+    false
+}
+
+/// 查 GitHub 最新 Release，跟当前版本比对
+#[tauri::command]
+pub async fn check_update() -> Result<UpdateInfo, String> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(15))
+        .build()
+        .map_err(|e| format!("HTTP 客户端初始化失败：{e}"))?;
+    let resp = client
+        .get("https://api.github.com/repos/hope023/XiaoZhou/releases/latest")
+        .header("User-Agent", "xiaozhou-desktop")
+        .header("Accept", "application/vnd.github+json")
+        .send()
+        .await
+        .map_err(|e| format!("访问 GitHub 失败：{e}"))?;
+    if resp.status().as_u16() == 404 {
+        return Err("仓库还没有发布过 Release，发布 v0.1.0 之后就能检测了".into());
+    }
+    if !resp.status().is_success() {
+        return Err(format!("GitHub 返回 {}", resp.status().as_u16()));
+    }
+    let value: Value = resp.json().await.map_err(|e| format!("解析失败：{e}"))?;
+    let latest = value
+        .get("tag_name")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim_start_matches('v')
+        .to_string();
+    let current = env!("CARGO_PKG_VERSION").to_string();
+    Ok(UpdateInfo {
+        has_update: version_gt(&latest, &current) && !latest.is_empty(),
+        url: value
+            .get("html_url")
+            .and_then(Value::as_str)
+            .unwrap_or("https://github.com/hope023/XiaoZhou/releases")
+            .to_string(),
+        notes: value
+            .get("body")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .chars()
+            .take(500)
+            .collect(),
+        current,
+        latest,
+    })
 }
 
 #[cfg(test)]

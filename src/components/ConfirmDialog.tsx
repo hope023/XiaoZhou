@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { DiffData } from "../types";
 
 interface Props {
@@ -12,6 +13,25 @@ interface Props {
 
 export function ConfirmDialog({ summary, diff, context, onApprove, onReject }: Props) {
   const isFile = !!diff;
+  const [remember, setRemember] = useState(false);
+
+  const approve = () => {
+    // 只记命令，不记文件改动（文件每次都要看 diff）
+    if (remember && !isFile) {
+      try {
+        const remembered: string[] = JSON.parse(
+          localStorage.getItem("xiaozhou.approved.v1") || "[]"
+        );
+        if (!remembered.includes(summary)) {
+          remembered.push(summary);
+          localStorage.setItem("xiaozhou.approved.v1", JSON.stringify(remembered.slice(-50)));
+        }
+      } catch {
+        /* 忽略 */
+      }
+    }
+    onApprove();
+  };
 
   return (
     <div className="settings-backdrop" onClick={onReject}>
@@ -52,11 +72,22 @@ export function ConfirmDialog({ summary, diff, context, onApprove, onReject }: P
           </>
         )}
 
+        {!isFile && (
+          <label className="confirm-remember">
+            <input
+              type="checkbox"
+              checked={remember}
+              onChange={(event) => setRemember(event.target.checked)}
+            />
+            记住这条命令，以后不再询问
+          </label>
+        )}
+
         <div className="confirm-actions">
           <button className="ghost-btn wide" onClick={onReject}>
             {isFile ? "不改" : "拒绝"}
           </button>
-          <button className="primary-btn" onClick={onApprove} autoFocus>
+          <button className="primary-btn" onClick={approve} autoFocus>
             {isFile ? "应用" : "执行"}
           </button>
         </div>

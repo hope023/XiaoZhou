@@ -21,6 +21,8 @@ interface Props {
   models: string[];
   onSelectModel: (model: string) => void;
   onManageModels: () => void;
+  /** 上下文用量提示，如 "18.2k / 24k" */
+  contextUsage?: string;
 }
 
 /** 读文件为 data URL，超过 8MB 的图片拒收，避免请求体爆炸 */
@@ -54,6 +56,7 @@ export function Composer({
   models,
   onSelectModel,
   onManageModels,
+  contextUsage,
 }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -350,7 +353,14 @@ export function Composer({
         </div>
       </div>
 
-      <div className="composer-hint">Enter 发送 · Shift + Enter 换行 · @ 引用文件 · 粘贴截图</div>
+      <div className="composer-hint">
+        <span>Enter 发送 · Shift + Enter 换行 · @ 引用文件 · 粘贴截图</span>
+        {contextUsage && (
+          <span className="composer-usage" title="当前会话的上下文用量 / 预算，快到预算时早期对话会被摘要压缩">
+            {contextUsage}
+          </span>
+        )}
+      </div>
     </div>
   );
 }

@@ -215,6 +215,10 @@ export function toolLabel(name: string): string {
     case "use_skill":
       return "调用技能";
     default:
+      if (name.startsWith("mcp__")) {
+        const [, server, tool] = name.split("__");
+        return `${server}·${tool}`;
+      }
       return name;
   }
 }
@@ -248,6 +252,11 @@ export function summarizeArgs(name: string, rawArgs: string): string {
   if (name === "glob") return pick("pattern");
   if (name === "undo_last") return "";
   if (name === "use_skill") return pick("name");
+  if (name.startsWith("mcp__")) {
+    const [, server, tool] = name.split("__");
+    // 摘要带参数原文：权限记忆按精确匹配放行，参数变了还是要问
+    return `${server}/${tool} ${rawArgs}`;
+  }
   return pick("path") || ".";
 }
 
@@ -262,6 +271,26 @@ export async function executeTool(
     channel.onmessage = (event) => {
       if (event.kind === "output") options.onOutput?.(event.text);
     };
+  }
+
+  // MCP 工具走独立通道：mcp__服务__工具
+  if (name.startsWith("mcp__")) {
+    const [, server, tool] = name.split("__");
+    if (!server || !tool) {
+      return { ok: false, output: `MCP 工具名不合法：${name}` };
+    }
+    try {
+      return await invoke<ToolOutcome>("mcp_call_tool", {
+        server,
+        tool,
+        args,
+      });
+    } catch (err) {
+      return {
+        ok: false,
+        output: `MCP 工具执行异常：${typeof err === "string" ? err : String(err)}`,
+      };
+    }
   }
 
   // run_id 交给后端登记，前端点「中断」时用它找到对应进程
