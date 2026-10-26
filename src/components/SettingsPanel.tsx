@@ -199,21 +199,34 @@ export function SettingsPanel({ settings, schedules, onSchedulesChange, initialT
             </div>
 
             <div className="field">
-              <label>单次任务最多轮数</label>
+              <label>单段任务时长（分钟）</label>
               <input
                 type="number"
                 min={1}
                 max={120}
-                value={draft.maxRounds}
+                value={draft.taskMinutes}
                 onChange={(event) =>
-                  patch({ maxRounds: Math.max(1, Math.min(120, Number(event.target.value) || 1)) })
+                  patch({ taskMinutes: Math.max(1, Math.min(120, Number(event.target.value) || 15)) })
                 }
               />
               <span className="field-hint">
-                一轮 = 模型请求一次（一轮里可以同时调多个工具）。复杂任务
-                （读几个文件再改再验证）常见 10~20 轮；像「通读整个项目做审查」这类
-                重任务可以开到 60~100。用到 75% 时小舟会收到收敛提醒，最后一轮会强制给出结论，
-                不会白跑
+                小舟按时间跑，不再让你算轮数：一段跑满这个时长就先给你阶段结论。
+                普通改代码任务一段够用；通读整个项目做审查建议 30~60 分钟
+              </span>
+            </div>
+
+            <div className="field">
+              <label className="switch-row">
+                <input
+                  type="checkbox"
+                  checked={draft.autoContinue}
+                  onChange={(event) => patch({ autoContinue: event.target.checked })}
+                />
+                到时间后自动接着跑（最多 3 段）
+              </label>
+              <span className="field-hint">
+                开：一段跑满后自动压缩上下文、接着上一段的进度继续，你不用点「继续」；
+                关：跑满就停下来给你阶段结论，由你决定要不要接着做
               </span>
             </div>
 

@@ -38,12 +38,12 @@ const DEFAULT_SYSTEM = `你是「小舟」，一个运行在用户 Windows 电�
 6. 最终回复用中文，简洁直接。不要复述工具输出的全部内容，只说结论和关键点。
 7. 不要输出「我将要调用工具」这类空话，直接调用。
 
-预算与收敛（很重要，违反会白烧轮次）：
-- 本次任务最多有 {{ROUNDS}} 轮工具调用，上下文预算约 {{BUDGET}} token。每轮可以同时发起多个工具调用，务必并行。
+预算与收敛（很重要，违反会白烧时间）：
+- 本次任务时间预算约 {{MINUTES}} 分钟，上下文预算约 {{BUDGET}} token。每轮可以同时发起多个工具调用，务必并行。
 - 探索顺序：先用 glob / search_text 定位候选文件，再在一轮里并发 read_file 多个关键文件；不要一轮只读一个文件，也不要为了「看全」把所有文件读完。
 - 大文件用 offset / limit 只读相关段落，不要整篇通读。
 - 信息足够支撑结论就立刻停下写结论，剩下的留作「下一步建议」。
-- 轮数用到 75% 时会收到预算提醒，此后必须停止探索、直接收敛出结论。`;
+- 时间过半会收到提醒，此后优先收敛；时间到点会自动接着跑下一段，你不需要自己喊停，但也不要重复已经做过的工作。`;
 
 export function buildSystemPrompt(
   settings: Settings,
@@ -54,7 +54,7 @@ export function buildSystemPrompt(
   const now = new Date().toLocaleString("zh-CN", { hour12: false });
   let prompt = DEFAULT_SYSTEM.replace("{{WORKSPACE}}", workspace || "（未设置）")
     .replace("{{NOW}}", now)
-    .replace("{{ROUNDS}}", String(Math.max(1, settings.maxRounds || 25)))
+    .replace("{{MINUTES}}", String(Math.max(1, Math.round(settings.taskMinutes || 15))))
     .replace("{{BUDGET}}", String(Math.max(4000, settings.contextBudget || 24000)));
   if (mode) {
     const info = modeInfo(mode);
@@ -518,7 +518,7 @@ export async function runAgent(options: AgentRunOptions): Promise<void> {
     options.todos
   );
   const totalCost = rawMessages.reduce((sum, msg) => sum + messageCost(msg), 0);
-  const apiMessages =
+  let apiMessages =
     totalCost > budget
       ? await compactMessages(rawMessages, settings, budget, workspace)
       : rawMessages;
@@ -533,7 +533,6 @@ export async function runAgent(options: AgentRunOptions): Promise<void> {
   const parts: MessagePart[] = [];
   const allToolCalls: ToolCall[] = [];
   const allToolResults: ToolResult[] = [];
-  const maxRounds = Math.max(1, settings.maxRounds);
   let emptyRetries = 0;
   let lastUsage: UsageInfo | null = null;
 
@@ -549,25 +548,54 @@ export async function runAgent(options: AgentRunOptions): Promise<void> {
       usage: lastUsage,
     });
 
-  // 轮数用到 75% 时提醒收敛；最后一轮直接摘掉工具，逼模型用已有信息出结论
-  const warnAt = Math.max(1, Math.floor(maxRounds * 0.75));
-  let budgetWarned = false;
+  // 不再让用户配轮数：按「时间预算 + 自动续段」跑，轮数只是防死循环的硬兜底
+  const HARD_ROUND_CAP = 150;
+  const MAX_CONTINUES = 3;
+  const segmentMs = Math.max(0.2, settings.taskMinutes || 15) * 60_000;
+  const autoContinue = settings.autoContinue !== false;
 
-  for (let round = 0; round < maxRounds; round++) {
+  let segmentStart = Date.now(); // 当前段的起始时间（自动续段后重置）
+  let continues = 0;
+  let segmentWarned = false;
+  let forceText = false;
+  const callCounts = new Map<string, number>();
+
+  for (let round = 0; round < HARD_ROUND_CAP; round++) {
     if (isAborted()) return;
 
-    const isLastRound = round === maxRounds - 1;
-    if (isLastRound) {
+    // 时间预算：到点先自动续段，续满 3 段后强制收尾（收尾轮不给工具）
+    const elapsed = Date.now() - segmentStart;
+    if (!forceText && elapsed > segmentMs) {
+      if (autoContinue && continues < MAX_CONTINUES) {
+        continues += 1;
+        segmentStart = Date.now();
+        segmentWarned = false;
+        // 段与段之间压一次上下文，避免越跑越长
+        apiMessages = await compactMessages(apiMessages, settings, budget, workspace);
+        apiMessages.push({
+          role: "user",
+          content: `【自动继续 ${continues}/${MAX_CONTINUES}】上一段的时间预算用完了，现在接着做，不要重复已经完成的工作；先用一句话说明当前进度，再继续推进没做完的部分。`,
+        });
+      } else {
+        forceText = true;
+        apiMessages.push({
+          role: "user",
+          content:
+            "【时间到】本次任务的时间预算已用完，这一轮不能再调用工具。请立刻基于已有的信息给出结论：1) 已确认的关键发现（分条，带文件路径/行号） 2) 还没查清的部分（卡在哪） 3) 建议的下一步。",
+        });
+      }
+    } else if (!forceText && round === HARD_ROUND_CAP - 1) {
+      forceText = true;
       apiMessages.push({
         role: "user",
         content:
-          "【最后一轮】工具预算已用完，这一轮不能再调用工具。现在立刻基于已经读到的信息给出结论：1) 已确认的关键发现（分条，带文件路径/行号） 2) 还没查清的部分（卡在哪） 3) 建议的下一步。不要再写「让我再看看」这类话。",
+          "【最后一轮】这一轮不能再调用工具了。请立刻基于已经读到的信息给出结论：1) 已确认的关键发现 2) 还没查清的部分 3) 建议的下一步。",
       });
-    } else if (!budgetWarned && round >= warnAt) {
-      budgetWarned = true;
+    } else if (!forceText && !segmentWarned && elapsed > segmentMs * 0.7) {
+      segmentWarned = true;
       apiMessages.push({
         role: "user",
-        content: `【预算提醒】已用 ${round}/${maxRounds} 轮，只剩 ${maxRounds - round} 轮。停止发散探索，开始收敛：优先补最关键的 1~2 个信息，然后给出结论和后续建议。`,
+        content: `【时间提醒】本段已用 ${Math.round(elapsed / 1000)} 秒（预算 ${Math.round(segmentMs / 1000)} 秒）。优先把手上这一步做完、给出结论，别再开新话题。`,
       });
     }
 
@@ -584,7 +612,7 @@ export async function runAgent(options: AgentRunOptions): Promise<void> {
         apiKey: settings.apiKey,
         model: settings.model,
         messages: apiMessages,
-        tools: isLastRound
+        tools: forceText
           ? []
           : [
               ...TOOL_SPECS.filter((spec) => permission.tools.includes(spec.function.name)),
@@ -631,17 +659,17 @@ export async function runAgent(options: AgentRunOptions): Promise<void> {
       if (rIndex >= 0) parts.splice(rIndex, 1);
     }
 
-    // 最后一轮已经不给工具了；个别模型仍可能吐出工具调用，一律忽略，直接收尾
-    const calls = isLastRound ? [] : done.toolCalls.filter((call) => call?.function?.name);
+    // 已经进入强制收尾时不再给工具；个别模型仍可能吐出工具调用，一律忽略
+    const calls = forceText ? [] : done.toolCalls.filter((call) => call?.function?.name);
     if (calls.length === 0) {
-      // 既没正文也没工具调用，多半是模型抽风，自动重试一次（最后一轮不重试，直接收尾）
-      if (!roundText.trim() && !isLastRound && emptyRetries < 2 && !isAborted()) {
+      // 既没正文也没工具调用，多半是模型抽风，自动重试一次（收尾轮不重试，直接结束）
+      if (!roundText.trim() && !forceText && emptyRetries < 2 && !isAborted()) {
         emptyRetries += 1;
         continue;
       }
-      if (isLastRound && !roundText.trim()) {
+      if (forceText && !roundText.trim()) {
         roundText =
-          "这一轮工具预算已用完，模型没有给出文字结论。可以直接回复「继续」，我会带着已读到的内容接着往下做。";
+          "时间/轮次预算已用完，模型这一轮没有输出文字结论。可以直接回复「继续」，我会带着已读到的内容接着往下做。";
         textPart.text = roundText;
       }
       push();
@@ -790,17 +818,42 @@ export async function runAgent(options: AgentRunOptions): Promise<void> {
     }
 
     if (isAborted()) return;
+
+    // 死循环检测：同一组「工具 + 参数」重复调用，说明模型在原地打转
+    let worstRepeat = 0;
+    for (const call of calls) {
+      const sig = `${call.function.name}:${call.function.arguments ?? ""}`;
+      const hits = (callCounts.get(sig) ?? 0) + 1;
+      callCounts.set(sig, hits);
+      worstRepeat = Math.max(worstRepeat, hits);
+    }
+    if (worstRepeat >= 6) {
+      forceText = true;
+      apiMessages.push({
+        role: "user",
+        content:
+          "【原地打转】同一组工具调用已经重复多次，再调也不会得到新信息。这一轮不能再调工具，请直接给出当前结论和下一步建议。",
+      });
+    } else if (worstRepeat === 3) {
+      apiMessages.push({
+        role: "user",
+        content:
+          "【重复调用提醒】你刚才用完全相同的参数调用了同一个工具，结果不会变。换个思路：换参数、换工具，或者直接基于现有信息给结论。",
+      });
+    }
   }
 
   if (!parts.some((part) => part.kind === "text" && part.text.trim())) {
     onAssistant({
-      content: `已经用满 ${maxRounds} 轮工具，但这一步还没收敛出结论。直接回复「继续」即可接着上次的进度往下做；也可以在设置里把「单次任务最多轮数」再调高一些。`,
+      content:
+        "这次任务跑到了硬上限还没收敛（正常任务碰不到）。直接回复「继续」即可接着上次的进度往下做。",
       parts: [
         ...parts,
         {
           kind: "text",
           id: newId(),
-          text: `已经用满 ${maxRounds} 轮工具，但这一步还没收敛出结论。直接回复「继续」即可接着上次的进度往下做；也可以在设置里把「单次任务最多轮数」再调高一些。`,
+          text:
+            "这次任务跑到了硬上限还没收敛（正常任务碰不到）。直接回复「继续」即可接着上次的进度往下做。",
         },
       ],
       toolCalls: [...allToolCalls],

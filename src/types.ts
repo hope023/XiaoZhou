@@ -129,7 +129,10 @@ export interface Settings {
   defaultMode: AgentMode;
   /** 发给模型的上下文预算（近似 token 数） */
   contextBudget: number;
-  maxRounds: number;
+  /** 单段任务时长上限（分钟）。到点先收尾；开了自动继续则接续下一段 */
+  taskMinutes: number;
+  /** 到时间上限后是否自动接续（最多 3 段），无需手动点继续 */
+  autoContinue: boolean;
   /** 全局呼出快捷键，如 alt+space、ctrl+shift+z */
   toggleShortcut: string;
   /** 界面字体大小（px），以 14px 为基准整体缩放 */

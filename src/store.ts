@@ -14,7 +14,8 @@ export const DEFAULT_SETTINGS: Settings = {
   workspace: "",
   defaultMode: "standard",
   contextBudget: 32000,
-  maxRounds: 30,
+  taskMinutes: 15,
+  autoContinue: true,
   toggleShortcut: "alt+space",
   fontSize: 15,
   fontFamily: "default",
@@ -98,10 +99,8 @@ export function loadSettings(): Settings {
     merged.defaultMode = raw.autoApprove ? "yolo" : "standard";
   }
   delete (merged as { autoApprove?: boolean }).autoApprove;
-  // 12/25 是旧版默认轮数，上限太紧；老用户跟着升到新默认，除非自己改过
-  if (!("maxRounds" in raw) || raw.maxRounds === 12 || raw.maxRounds === 25) {
-    merged.maxRounds = DEFAULT_SETTINGS.maxRounds;
-  }
+  // 轮数上限已改成内部兜底（不再让用户配），老数据里的 maxRounds 直接忽略
+  delete (merged as { maxRounds?: number }).maxRounds;
   // 24000 是旧版默认上下文预算，读代码类任务太容易触发压缩；同样跟着升
   if (!("contextBudget" in raw) || raw.contextBudget === 24000) {
     merged.contextBudget = DEFAULT_SETTINGS.contextBudget;
