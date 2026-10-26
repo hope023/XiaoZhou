@@ -1,8 +1,8 @@
 import { useState } from "react";
 import logo from "../assets/logo.png";
-import type { ChatMessage } from "../types";
+import type { ChatMessage, MessagePart, ToolResult } from "../types";
 import { Markdown } from "../Markdown";
-import { ToolCard } from "./ToolCard";
+import { ToolGroup } from "./ToolCard";
 
 /** 把 <think>…</think>（或流式未闭合的 <think>…）从正文里切出来 */
 function parseThinking(
@@ -82,6 +82,57 @@ function fmt(n?: number): string {
   return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
 }
 
+/** 思考块标题：带上字数，长思考一眼看得出体量 */
+function thinkLabel(text: string): string {
+  const len = text.trim().length;
+  return len >= 1000 ? `思考过程 · ${(len / 1000).toFixed(1)}k 字` : `思考过程 · ${len} 字`;
+}
+
+type RenderNode =
+  | { kind: "text"; key: string; text: string }
+  | { kind: "think"; key: string; text: string; streaming?: boolean }
+  | { kind: "tools"; key: string; callIds: string[] };
+
+/**
+ * 把零件的流水合并：连续的多轮思考合成一个折叠块，
+ * 连续多轮的工具调用合成一条摘要，避免十几行「读取 …」刷屏。
+ */
+function buildNodes(parts: MessagePart[], streaming?: boolean): RenderNode[] {
+  const nodes: RenderNode[] = [];
+  const pushThink = (key: string, text: string, isStreaming?: boolean) => {
+    const last = nodes[nodes.length - 1];
+    if (last?.kind === "think") {
+      last.text = `${last.text}\n\n${text}`;
+      last.streaming = last.streaming || isStreaming;
+      return;
+    }
+    nodes.push({ kind: "think", key, text, streaming: isStreaming });
+  };
+
+  for (const part of parts) {
+    if (part.kind === "reasoning") {
+      if (part.text.trim()) pushThink(part.id, part.text, streaming);
+      continue;
+    }
+    if (part.kind === "tools") {
+      if (!part.callIds.length) continue;
+      const last = nodes[nodes.length - 1];
+      if (last?.kind === "tools") last.callIds.push(...part.callIds);
+      else nodes.push({ kind: "tools", key: part.id, callIds: [...part.callIds] });
+      continue;
+    }
+    if (!part.text.trim()) continue;
+    for (const segment of parseThinking(part.text)) {
+      if (segment.kind === "think") {
+        pushThink(`${part.id}-think-${segment.text.slice(0, 8)}`, segment.text, segment.streaming);
+      } else if (segment.text.trim()) {
+        nodes.push({ kind: "text", key: `${part.id}-text-${segment.text.slice(0, 8)}`, text: segment.text });
+      }
+    }
+  }
+  return nodes;
+}
+
 interface Props {
   message: ChatMessage;
   streaming?: boolean;
@@ -111,18 +162,15 @@ export function MessageItem({ message, streaming, onUndo, onRetry, onEdit, onBra
   const renderTools = (callIds: string[], key: string) => {
     const items = callIds
       .map((id) => results.find((result) => result.toolCallId === id))
-      .filter((result) => !!result);
+      .filter((result): result is ToolResult => !!result);
     if (!items.length) return null;
     return (
-      <div className="tool-list" key={key}>
-        {items.map((result, index) => (
-          <ToolCard
-            key={`${result!.toolCallId}-${index}`}
-            result={result!}
-            onUndo={onUndo ? () => onUndo(result!.toolCallId) : undefined}
-          />
-        ))}
-      </div>
+      <ToolGroup
+        key={key}
+        results={items}
+        streaming={streaming}
+        onUndo={onUndo}
+      />
     );
   };
 
@@ -181,32 +229,18 @@ export function MessageItem({ message, streaming, onUndo, onRetry, onEdit, onBra
       <img className="msg-avatar" src={logo} alt="" draggable={false} />
       <div className="msg-body">
         {hasParts
-          ? message.parts!.map((part) =>
-              part.kind === "text" ? (
-                part.text.trim() ? (
-                  parseThinking(part.text).map((segment) =>
-                    segment.kind === "think" ? (
-                      <ThinkingBlock
-                        key={part.id + segment.text.slice(0, 12)}
-                        text={segment.text}
-                        streaming={segment.streaming && streaming}
-                      />
-                    ) : (
-                      <Markdown key={part.id + segment.text.slice(0, 12)} text={segment.text} />
-                    )
-                  )
-                ) : null
-              ) : part.kind === "reasoning" ? (
-                part.text.trim() ? (
-                  <ThinkingBlock
-                    key={part.id}
-                    text={part.text}
-                    streaming={streaming}
-                    defaultLabel="推理过程"
-                  />
-                ) : null
+          ? buildNodes(message.parts!, streaming).map((node) =>
+              node.kind === "text" ? (
+                <Markdown key={node.key} text={node.text} />
+              ) : node.kind === "think" ? (
+                <ThinkingBlock
+                  key={node.key}
+                  text={node.text}
+                  streaming={node.streaming && streaming}
+                  defaultLabel={thinkLabel(node.text)}
+                />
               ) : (
-                renderTools(part.callIds, part.id)
+                renderTools(node.callIds, node.key)
               )
             )
           : [
