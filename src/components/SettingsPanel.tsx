@@ -203,16 +203,17 @@ export function SettingsPanel({ settings, schedules, onSchedulesChange, initialT
               <input
                 type="number"
                 min={1}
-                max={60}
+                max={120}
                 value={draft.maxRounds}
                 onChange={(event) =>
-                  patch({ maxRounds: Math.max(1, Math.min(60, Number(event.target.value) || 1)) })
+                  patch({ maxRounds: Math.max(1, Math.min(120, Number(event.target.value) || 1)) })
                 }
               />
               <span className="field-hint">
                 一轮 = 模型请求一次（一轮里可以同时调多个工具）。复杂任务
-                （读几个文件再改再验证）常见 10~20 轮，超出上限就停下。一般 25
-                够用，只有跑批处理才需要调更高
+                （读几个文件再改再验证）常见 10~20 轮；像「通读整个项目做审查」这类
+                重任务可以开到 60~100。用到 75% 时小舟会收到收敛提醒，最后一轮会强制给出结论，
+                不会白跑
               </span>
             </div>
 

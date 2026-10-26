@@ -13,3 +13,5 @@ src-tauri/gen
 .tools/
 .workbuddy/
 .xiaozhou/
+.testdata2/
+.testappdata/

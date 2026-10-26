@@ -36,7 +36,14 @@ const DEFAULT_SYSTEM = `你是「小舟」，一个运行在用户 Windows 电�
 4. 删除、覆盖重要文件、格式化、改系统设置这类不可逆操作，先说清后果再做。
 5. 工具返回错误时，读错误信息调整方案，不要原样重试。
 6. 最终回复用中文，简洁直接。不要复述工具输出的全部内容，只说结论和关键点。
-7. 不要输出「我将要调用工具」这类空话，直接调用。`;
+7. 不要输出「我将要调用工具」这类空话，直接调用。
+
+预算与收敛（很重要，违反会白烧轮次）：
+- 本次任务最多有 {{ROUNDS}} 轮工具调用，上下文预算约 {{BUDGET}} token。每轮可以同时发起多个工具调用，务必并行。
+- 探索顺序：先用 glob / search_text 定位候选文件，再在一轮里并发 read_file 多个关键文件；不要一轮只读一个文件，也不要为了「看全」把所有文件读完。
+- 大文件用 offset / limit 只读相关段落，不要整篇通读。
+- 信息足够支撑结论就立刻停下写结论，剩下的留作「下一步建议」。
+- 轮数用到 75% 时会收到预算提醒，此后必须停止探索、直接收敛出结论。`;
 
 export function buildSystemPrompt(
   settings: Settings,
@@ -45,10 +52,10 @@ export function buildSystemPrompt(
   guide?: string
 ): string {
   const now = new Date().toLocaleString("zh-CN", { hour12: false });
-  let prompt = DEFAULT_SYSTEM.replace("{{WORKSPACE}}", workspace || "（未设置）").replace(
-    "{{NOW}}",
-    now
-  );
+  let prompt = DEFAULT_SYSTEM.replace("{{WORKSPACE}}", workspace || "（未设置）")
+    .replace("{{NOW}}", now)
+    .replace("{{ROUNDS}}", String(Math.max(1, settings.maxRounds || 25)))
+    .replace("{{BUDGET}}", String(Math.max(4000, settings.contextBudget || 24000)));
   if (mode) {
     const info = modeInfo(mode);
     prompt += `\n\n当前权限模式：${info.label} —— ${info.desc}`;
@@ -542,8 +549,27 @@ export async function runAgent(options: AgentRunOptions): Promise<void> {
       usage: lastUsage,
     });
 
+  // 轮数用到 75% 时提醒收敛；最后一轮直接摘掉工具，逼模型用已有信息出结论
+  const warnAt = Math.max(1, Math.floor(maxRounds * 0.75));
+  let budgetWarned = false;
+
   for (let round = 0; round < maxRounds; round++) {
     if (isAborted()) return;
+
+    const isLastRound = round === maxRounds - 1;
+    if (isLastRound) {
+      apiMessages.push({
+        role: "user",
+        content:
+          "【最后一轮】工具预算已用完，这一轮不能再调用工具。现在立刻基于已经读到的信息给出结论：1) 已确认的关键发现（分条，带文件路径/行号） 2) 还没查清的部分（卡在哪） 3) 建议的下一步。不要再写「让我再看看」这类话。",
+      });
+    } else if (!budgetWarned && round >= warnAt) {
+      budgetWarned = true;
+      apiMessages.push({
+        role: "user",
+        content: `【预算提醒】已用 ${round}/${maxRounds} 轮，只剩 ${maxRounds - round} 轮。停止发散探索，开始收敛：优先补最关键的 1~2 个信息，然后给出结论和后续建议。`,
+      });
+    }
 
     const reasoningPart: MessagePart = { kind: "reasoning", id: newId(), text: "" };
     const textPart: MessagePart = { kind: "text", id: newId(), text: "" };
@@ -558,10 +584,12 @@ export async function runAgent(options: AgentRunOptions): Promise<void> {
         apiKey: settings.apiKey,
         model: settings.model,
         messages: apiMessages,
-        tools: [
-          ...TOOL_SPECS.filter((spec) => permission.tools.includes(spec.function.name)),
-          ...(mode === "readonly" ? [] : await mcpToolSpecs()),
-        ],
+        tools: isLastRound
+          ? []
+          : [
+              ...TOOL_SPECS.filter((spec) => permission.tools.includes(spec.function.name)),
+              ...(mode === "readonly" ? [] : await mcpToolSpecs()),
+            ],
         temperature: settings.temperature,
       },
       (delta) => {
@@ -603,12 +631,18 @@ export async function runAgent(options: AgentRunOptions): Promise<void> {
       if (rIndex >= 0) parts.splice(rIndex, 1);
     }
 
-    const calls = done.toolCalls.filter((call) => call?.function?.name);
+    // 最后一轮已经不给工具了；个别模型仍可能吐出工具调用，一律忽略，直接收尾
+    const calls = isLastRound ? [] : done.toolCalls.filter((call) => call?.function?.name);
     if (calls.length === 0) {
-      // 既没正文也没工具调用，多半是模型抽风，自动重试一次
-      if (!roundText.trim() && emptyRetries < 2 && !isAborted()) {
+      // 既没正文也没工具调用，多半是模型抽风，自动重试一次（最后一轮不重试，直接收尾）
+      if (!roundText.trim() && !isLastRound && emptyRetries < 2 && !isAborted()) {
         emptyRetries += 1;
         continue;
+      }
+      if (isLastRound && !roundText.trim()) {
+        roundText =
+          "这一轮工具预算已用完，模型没有给出文字结论。可以直接回复「继续」，我会带着已读到的内容接着往下做。";
+        textPart.text = roundText;
       }
       push();
       return;
@@ -760,13 +794,13 @@ export async function runAgent(options: AgentRunOptions): Promise<void> {
 
   if (!parts.some((part) => part.kind === "text" && part.text.trim())) {
     onAssistant({
-      content: `已经连续调用 ${maxRounds} 轮工具还没得出结论。可以在设置里调高轮数上限，或者把任务拆小一点。`,
+      content: `已经用满 ${maxRounds} 轮工具，但这一步还没收敛出结论。直接回复「继续」即可接着上次的进度往下做；也可以在设置里把「单次任务最多轮数」再调高一些。`,
       parts: [
         ...parts,
         {
           kind: "text",
           id: newId(),
-          text: `已经连续调用 ${maxRounds} 轮工具还没得出结论。可以在设置里调高轮数上限，或者把任务拆小一点。`,
+          text: `已经用满 ${maxRounds} 轮工具，但这一步还没收敛出结论。直接回复「继续」即可接着上次的进度往下做；也可以在设置里把「单次任务最多轮数」再调高一些。`,
         },
       ],
       toolCalls: [...allToolCalls],
