@@ -16,3 +16,4 @@ src-tauri/gen
 .testdata2/
 .testappdata/
 .shot-*.png
+.testhome/

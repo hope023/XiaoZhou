@@ -180,8 +180,7 @@ export function SettingsPanel({ settings, schedules, onSchedulesChange, initialT
 
   // 主目录 / 盘符根目录当工作目录范围过大，提示用户换具体项目
   const workspaceTrimmed = draft.workspace.trim();
-  const wideRoot =
-    /^[a-z]:\\?(\\)?$/i.test(workspaceTrimmed) || /^[a-z]:\\(users|documents and settings)\\[^\\]+\\?$/i.test(workspaceTrimmed);
+  const wideRoot = /^[a-z]:\\?\/?$/i.test(workspaceTrimmed);
 
   const currentLabel =
     NAV.flatMap((group) => group.items).find((item) => item.key === section)?.label ?? "";
@@ -322,7 +321,7 @@ export function SettingsPanel({ settings, schedules, onSchedulesChange, initialT
                 )}
                 {wideRoot && (
                   <span className="field-hint warn">
-                    {tr("现在是盘符根目录或用户主目录，范围太大了。建议选一个具体项目文件夹，或用默认的 ~/XiaoZhou")}
+                    {tr("盘符根目录范围太大了，选一个具体项目文件夹吧")}
                   </span>
                 )}
                 <div className="schedule-row">
@@ -333,10 +332,10 @@ export function SettingsPanel({ settings, schedules, onSchedulesChange, initialT
                       if (dir) patch({ workspace: dir });
                     }}
                   >
-                    {tr("用默认目录（~/XiaoZhou）")}
+                    {tr("用默认目录（用户主目录）")}
                   </button>
                   <span className="field-hint">
-                    {tr("会话记录、定时任务、模型配置和用户级记忆都存在 %APPDATA%\\xiaozhou，不会放进工作目录")}
+                    {tr("会话记录、定时任务、模型配置和用户级记忆都存在 ~/.xiaozhou，不会放进工作目录")}
                   </span>
                 </div>
               </div>
@@ -455,7 +454,7 @@ export function SettingsPanel({ settings, schedules, onSchedulesChange, initialT
                       {tr("清空记忆")}
                     </button>
                     <span className="field-hint">
-                      {tr("存放在 %APPDATA%\\xiaozhou\\memory.md（用户级）和工作目录 .xiaozhou\\memory.md（项目级），可以直接编辑")}
+                      {tr("存放在 ~/.xiaozhou/memory.md（用户级）和工作目录下的 .xiaozhou/memory.md（项目级），都是纯 Markdown，可以直接编辑")}
                     </span>
                   </div>
                 </div>

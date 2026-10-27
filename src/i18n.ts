@@ -215,8 +215,8 @@ const EN: Record<string, string> = {
   "用户级 {a} 条 · 项目级 {b} 条。对话里说「记住…」，小舟会存下来并在此后所有对话中生效":
     "{a} user entries · {b} project entries. Say \"remember…\" in a chat and it will be kept for future chats.",
   "清空记忆": "Clear memory",
-  "存放在 %APPDATA%\\xiaozhou\\memory.md（用户级）和工作目录 .xiaozhou\\memory.md（项目级），可以直接编辑":
-    "Stored in %APPDATA%\\xiaozhou\\memory.md (user) and .xiaozhou\\memory.md in the working folder (project). Both are plain Markdown you can edit.",
+  "存放在 ~/.xiaozhou/memory.md（用户级）和工作目录下的 .xiaozhou/memory.md（项目级），都是纯 Markdown，可以直接编辑":
+    "Stored in ~/.xiaozhou/memory.md (user) and .xiaozhou/memory.md in the working folder (project). Both are plain Markdown you can edit.",
   "检查更新": "Check for updates",
   "检查中…": "Checking…",
   "有新版本 v{latest}（当前 v{current}），去 Release 页下载":
@@ -298,8 +298,8 @@ const EN: Record<string, string> = {
   "{n} 个工具": "{n} tools",
   "填本地 MCP server 的启动命令（stdio 传输）。连接成功后它的工具会自动出现在「标准 / 放开」模式的工具列表里，工具名形如 mcp__dbx__query。":
     "Enter the launch command of a local MCP server (stdio). Once connected, its tools appear automatically in Standard and Unrestricted modes as mcp__dbx__query.",
-  "还没有配置 MCP server。配置保存在 %APPDATA%\\xiaozhou\\mcp.json，也可以直接编辑那个文件。":
-    "No MCP servers yet. Config lives in %APPDATA%\\xiaozhou\\mcp.json — you can also edit that file by hand.",
+  "还没有配置 MCP server。配置保存在 ~/.xiaozhou/mcp.json，也可以直接编辑那个文件。":
+    "No MCP servers yet. Config lives in ~/.xiaozhou/mcp.json — you can also edit that file by hand.",
 
 
   "单段任务时长（分钟）": "Segment length (minutes)",
@@ -334,8 +334,12 @@ const EN: Record<string, string> = {
   "现在是盘符根目录或用户主目录，范围太大了。建议选一个具体项目文件夹，或用默认的 ~/XiaoZhou":
     "This is a drive root or your home folder — far too broad. Pick an actual project folder, or use the default ~/XiaoZhou.",
   "用默认目录（~/XiaoZhou）": "Use default folder (~/XiaoZhou)",
-  "会话记录、定时任务、模型配置和用户级记忆都存在 %APPDATA%\\xiaozhou，不会放进工作目录":
-    "Chat history, scheduled tasks, model config and user-level memory live in %APPDATA%\\xiaozhou — not in the working folder.",
+  "会话记录、定时任务、模型配置和用户级记忆都存在 ~/.xiaozhou，不会放进工作目录":
+    "Chat history, scheduled tasks, model config and user-level memory live in ~/.xiaozhou — not in the working folder.",
+
+
+  "用默认目录（用户主目录）": "Use default folder (home)",
+  "盘符根目录范围太大了，选一个具体项目文件夹吧": "A drive root is too broad — pick an actual project folder.",
 
 };
 

@@ -150,7 +150,7 @@ export function McpPanel({ active }: Props) {
       <div className="mcp-list">
         {Object.keys(config).length === 0 && (
           <span className="field-hint">
-            {tr("还没有配置 MCP server。配置保存在 %APPDATA%\\xiaozhou\\mcp.json，也可以直接编辑那个文件。")}
+            {tr("还没有配置 MCP server。配置保存在 ~/.xiaozhou/mcp.json，也可以直接编辑那个文件。")}
           </span>
         )}
         {Object.entries(config).map(([serverName, spec]) => {

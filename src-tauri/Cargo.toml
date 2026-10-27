@@ -1,6 +1,6 @@
 [package]
 name = "xiaozhou"
-version = "0.4.2"
+version = "0.4.3"
 description = "小舟 — 桌面 AI 助手"
 authors = ["hope"]
 edition = "2021"

@@ -103,13 +103,11 @@ pub fn home_dir() -> String {
         .unwrap_or_else(|_| "C:\\".to_string())
 }
 
-/// 默认工作目录：用户主目录下的 XiaoZhou 文件夹（首次用自动建好）。
-/// 直接拿整个主目录当沙盒太宽，容易误伤；单独一个文件夹更清楚。
+/// 默认工作目录：用户主目录。数据目录是主目录下的 .xiaozhou，
+/// 跟 Claude Code 的 ~/.claude 一样——没开项目时就在「家」里干活。
 #[tauri::command]
 pub fn default_workspace() -> String {
-    let dir = PathBuf::from(home_dir()).join("XiaoZhou");
-    let _ = std::fs::create_dir_all(&dir);
-    dir.to_string_lossy().to_string()
+    home_dir()
 }
 
 /// 设置页用它判断用户填的目录是否有效
@@ -917,12 +915,11 @@ pub async fn run_tool(
 
 /* ---------------- 会话落盘 / 审计 / 预览 / 文件引用 ---------------- */
 
-/// 应用数据目录：%APPDATA%/xiaozhou，会话和审计都放这里
+/// 应用数据目录：~/.xiaozhou，跟 Claude Code 的 ~/.claude 同构
 pub fn app_data_dir() -> PathBuf {
-    let base = std::env::var("APPDATA")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from(home_dir()));
-    base.join("xiaozhou")
+    let dir = PathBuf::from(home_dir()).join(STATE_DIR);
+    let _ = std::fs::create_dir_all(&dir);
+    dir
 }
 
 #[tauri::command]
@@ -1353,7 +1350,7 @@ pub async fn check_update() -> Result<UpdateInfo, String> {
 
 /* ---------------- 长期记忆（zcode 式） ---------------- */
 
-/// 用户级：%APPDATA%/xiaozhou/memory.md；项目级：<workspace>/.xiaozhou/memory.md
+/// 用户级：~/.xiaozhou/memory.md；项目级：<workspace>/.xiaozhou/memory.md
 fn memory_path(root: &str, scope: &str) -> Result<PathBuf, String> {
     match scope {
         "user" => Ok(app_data_dir().join("memory.md")),
@@ -1364,12 +1361,14 @@ fn memory_path(root: &str, scope: &str) -> Result<PathBuf, String> {
 /// 给 system prompt 用的两段记忆原文
 #[tauri::command]
 pub fn memory_read(root: String) -> Value {
-    let user = std::fs::read_to_string(app_data_dir().join("memory.md"))
-        .unwrap_or_default();
-    let project = root_of(&root)
-        .ok()
-        .and_then(|r| std::fs::read_to_string(r.join(STATE_DIR).join("memory.md")).ok())
-        .unwrap_or_default();
+    let user_file = app_data_dir().join("memory.md");
+    let user = std::fs::read_to_string(&user_file).unwrap_or_default();
+    // 工作目录就是主目录时，项目级记忆和用户级是同一个文件，别读两遍
+    let project_file = root_of(&root).ok().map(|r| r.join(STATE_DIR).join("memory.md"));
+    let project = match project_file {
+        Some(path) if path != user_file => std::fs::read_to_string(path).unwrap_or_default(),
+        _ => String::new(),
+    };
     json!({
         "user": clip(user.trim().to_string(), 4_000),
         "project": clip(project.trim().to_string(), 4_000),
