@@ -141,6 +141,10 @@ export interface Settings {
   fontFamily: "default" | "smiley";
   /** 界面语言：简体中文 / 繁体中文 / English */
   language: "zh-CN" | "zh-TW" | "en";
+  /** 改完文件自动跑 typecheck / build，把报错喂回模型 */
+  autoVerify: boolean;
+  /** 复杂任务先列 todo 计划再动手 */
+  planFirst: boolean;
 }
 
 /** 多模态内容块：文本或图片（data URL） */

@@ -49,7 +49,8 @@ export function buildSystemPrompt(
   settings: Settings,
   workspace: string,
   mode?: AgentMode,
-  guide?: string
+  guide?: string,
+  repoMap?: string
 ): string {
   const now = new Date().toLocaleString("zh-CN", { hour12: false });
   let prompt = DEFAULT_SYSTEM.replace("{{WORKSPACE}}", workspace || "（未设置）")
@@ -63,6 +64,15 @@ export function buildSystemPrompt(
   if (guide) {
     prompt += `\n\n这个项目的约定（来自工作目录里的约定文件，必须遵守）：\n${guide}`;
   }
+  if (repoMap && repoMap.trim()) {
+    prompt += `\n\n${repoMap.trim()}`;
+  }
+  if (settings.planFirst !== false) {
+    prompt += `\n\n做事方式：
+- 要改代码或需要多步操作时，先用 todo_write 列出 3~6 步计划，再按顺序执行，每完成一步就更新清单；一两句话能答完的问题不用列。
+- 改完文件后如果收到「自动验证」的输出，先看有没有报错；有报错就继续修，直到通过或确认是环境问题。
+- 改大文件时优先 edit_file 做局部替换，别整文件重写。`;
+  }
   return prompt;
 }
 
@@ -75,9 +85,10 @@ export function toApiMessages(
   guide?: string,
   skills?: string,
   memory?: string,
-  todos?: { content: string; status: "pending" | "in_progress" | "done" }[]
+  todos?: { content: string; status: "pending" | "in_progress" | "done" }[],
+  repoMap?: string
 ): ApiMessage[] {
-  let system = buildSystemPrompt(settings, workspace, mode, guide);
+  let system = buildSystemPrompt(settings, workspace, mode, guide, repoMap);
   if (todos && todos.length > 0) {
     const lines = todos.map(
       (item) =>
@@ -506,6 +517,15 @@ export async function runAgent(options: AgentRunOptions): Promise<void> {
     /* 没有技能就算了 */
   }
 
+  // 项目结构摘要：让模型先有全局印象，少盲读文件（失败就算了）
+  let repoMap: string | undefined;
+  try {
+    const map = await invoke<string | null>("repo_map", { root: workspace });
+    if (map && map.trim()) repoMap = map.trim();
+  } catch {
+    /* 没有就没有 */
+  }
+
   const budget = Math.max(4000, settings.contextBudget || 24000);
   const rawMessages = toApiMessages(
     options.history,
@@ -515,7 +535,8 @@ export async function runAgent(options: AgentRunOptions): Promise<void> {
     guide,
     skillList,
     memoryNote || undefined,
-    options.todos
+    options.todos,
+    repoMap
   );
   const totalCost = rawMessages.reduce((sum, msg) => sum + messageCost(msg), 0);
   let apiMessages =
@@ -559,6 +580,8 @@ export async function runAgent(options: AgentRunOptions): Promise<void> {
   let segmentWarned = false;
   let forceText = false;
   const callCounts = new Map<string, number>();
+  let dirty = false; // 本轮改过文件、还没验证
+  let verifyRuns = 0; // 一次任务最多自动验证 3 次
 
   for (let round = 0; round < HARD_ROUND_CAP; round++) {
     if (isAborted()) return;
@@ -801,6 +824,27 @@ export async function runAgent(options: AgentRunOptions): Promise<void> {
       result.output = outcome.output;
       result.status = "done";
       push();
+
+      // edit_file 撞上空白的差异时，替模型把当前文件读回来，下一轮直接照着重试
+      if (
+        !outcome.ok &&
+        name === "edit_file" &&
+        /没找到要替换的内容|出现了 \d+ 次/.test(outcome.output) &&
+        typeof parsed.path === "string"
+      ) {
+        const reread = await executeTool(
+          "read_file",
+          { path: parsed.path, offset: 1, limit: 400 },
+          workspace,
+          { runId: call.id, onOutput: () => {} }
+        );
+        if (reread.ok) {
+          result.output = `${outcome.output}\n\n【自动重读：${parsed.path} 的当前内容，照它重试 edit_file】\n${reread.output}`;
+          push();
+          return result.output;
+        }
+      }
+
       return outcome.output;
     };
 
@@ -818,6 +862,80 @@ export async function runAgent(options: AgentRunOptions): Promise<void> {
     }
 
     if (isAborted()) return;
+
+    // 刚才这一批改了文件？记下来，稍后统一跑一次验证
+    if (
+      slots.some(
+        (slot) =>
+          slot.result.ok && ["write_file", "edit_file"].includes(slot.call.function.name)
+      )
+    ) {
+      dirty = true;
+    }
+
+    // 自动验证：改完就跑 typecheck/build，把结果塞回上下文让模型自己修
+    if (dirty && verifyRuns < 3 && mode !== "readonly" && settings.autoVerify !== false) {
+      const cmd = await invoke<string | null>("verify_command", { root: workspace }).catch(
+        () => null
+      );
+      if (cmd) {
+        dirty = false;
+        verifyRuns += 1;
+        const verifyCall: ToolCall = {
+          id: `call_verify_${newId()}`,
+          type: "function",
+          function: {
+            name: "run_command",
+            arguments: JSON.stringify({ command: cmd, timeout_sec: 180 }),
+          },
+        };
+        const verifyResult: ToolResult = {
+          toolCallId: verifyCall.id,
+          name: "run_command",
+          args: `自动验证 · ${cmd}`,
+          output: "",
+          ok: true,
+          status: "running",
+        };
+        allToolCalls.push(verifyCall);
+        allToolResults.push(verifyResult);
+        parts.push({ kind: "tools", id: newId(), callIds: [verifyCall.id] });
+        push();
+
+        const checked = await executeTool(
+          "run_command",
+          { command: cmd, timeout_sec: 180 },
+          workspace,
+          {
+            runId: verifyCall.id,
+            onOutput: (line) => {
+              verifyResult.output = verifyResult.output
+                ? `${verifyResult.output}\n${line}`
+                : line;
+              push();
+            },
+          }
+        );
+        verifyResult.ok = checked.ok;
+        verifyResult.output = checked.output || (checked.ok ? "验证通过（无输出）" : "验证失败");
+        verifyResult.status = "done";
+        push();
+
+        apiMessages.push({
+          role: "assistant",
+          content: null,
+          tool_calls: [verifyCall],
+        });
+        apiMessages.push({
+          role: "tool",
+          tool_call_id: verifyCall.id,
+          content: checked.ok
+            ? `自动验证通过（${cmd}）\n${verifyResult.output.slice(-1500)}`
+            : `自动验证失败（${cmd}），请根据报错继续修\n${verifyResult.output.slice(-3000)}`,
+        });
+        if (isAborted()) return;
+      }
+    }
 
     // 死循环检测：同一组「工具 + 参数」重复调用，说明模型在原地打转
     let worstRepeat = 0;

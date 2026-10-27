@@ -21,6 +21,8 @@ pub fn run() {
             tools::default_workspace,
             tools::dir_exists,
             tools::project_guide,
+            tools::repo_map,
+            tools::verify_command,
             tools::load_sessions,
             tools::save_sessions,
             tools::read_reference,

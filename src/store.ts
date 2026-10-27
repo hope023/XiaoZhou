@@ -20,6 +20,8 @@ export const DEFAULT_SETTINGS: Settings = {
   fontSize: 15,
   fontFamily: "default",
   language: "zh-CN",
+  autoVerify: true,
+  planFirst: true,
 };
 
 export function newId(): string {

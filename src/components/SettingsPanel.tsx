@@ -44,6 +44,7 @@ const NAV: { group: string; items: { key: SectionKey; label: string }[] }[] = [
   {
     group: "对话与任务",
     items: [
+      { key: "execution", label: "执行策略" },
       { key: "budget", label: "时长与续跑" },
       { key: "context", label: "上下文与记忆" },
       { key: "shortcut", label: "快捷键" },
@@ -73,6 +74,7 @@ type SectionKey =
   | "appearance"
   | "workspace"
   | "permissions"
+  | "execution"
   | "budget"
   | "context"
   | "shortcut"
@@ -361,6 +363,38 @@ export function SettingsPanel({ settings, schedules, onSchedulesChange, initialT
                   {tr("新建对话默认用这个。已经开着的对话可以在顶栏右侧单独切换，互不影响")}
                 </span>
               </div>
+            )}
+
+            {section === "execution" && (
+              <>
+                <div className="field">
+                  <label className="switch-row">
+                    <input
+                      type="checkbox"
+                      checked={draft.planFirst}
+                      onChange={(event) => patch({ planFirst: event.target.checked })}
+                    />
+                    {tr("复杂任务先列计划再动手")}
+                  </label>
+                  <span className="field-hint">
+                    {tr("要改代码或多步操作时，先在对话里给出 3~6 步清单再逐步执行，你随时能看到进度；简单问答不受影响")}
+                  </span>
+                </div>
+
+                <div className="field">
+                  <label className="switch-row">
+                    <input
+                      type="checkbox"
+                      checked={draft.autoVerify}
+                      onChange={(event) => patch({ autoVerify: event.target.checked })}
+                    />
+                    {tr("改完文件自动跑验证（typecheck / build）")}
+                  </label>
+                  <span className="field-hint">
+                    {tr("识别到项目里的 typecheck / build 命令时，改完自动跑一次并把报错喂回模型自己修，一次任务最多 3 次。它真的会执行项目脚本，不需要就关掉")}
+                  </span>
+                </div>
+              </>
             )}
 
             {section === "budget" && (

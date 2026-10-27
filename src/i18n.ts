@@ -341,6 +341,15 @@ const EN: Record<string, string> = {
   "用默认目录（用户主目录）": "Use default folder (home)",
   "盘符根目录范围太大了，选一个具体项目文件夹吧": "A drive root is too broad — pick an actual project folder.",
 
+
+  "执行策略": "Execution",
+  "复杂任务先列计划再动手": "Plan before acting on complex tasks",
+  "要改代码或多步操作时，先在对话里给出 3~6 步清单再逐步执行，你随时能看到进度；简单问答不受影响":
+    "For code changes and multi-step work it lists 3–6 steps first, then executes them one by one so you can follow along. Simple questions are unaffected.",
+  "改完文件自动跑验证（typecheck / build）": "Auto-verify after edits (typecheck / build)",
+  "识别到项目里的 typecheck / build 命令时，改完自动跑一次并把报错喂回模型自己修，一次任务最多 3 次。它真的会执行项目脚本，不需要就关掉":
+    "When a typecheck/build command is detected, it runs once after edits and feeds errors back to the model, up to 3 times per task. It really executes project scripts — turn this off if you don't want that.",
+
 };
 
 /* ---------------- 简体 → 繁体（UI 常用字词表） ---------------- */

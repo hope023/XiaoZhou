@@ -17,3 +17,5 @@ src-tauri/gen
 .testappdata/
 .shot-*.png
 .testhome/
+.tmp-proj/
+.tmp-edit-test.txt

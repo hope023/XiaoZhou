@@ -526,25 +526,71 @@ fn tool_edit_file(root: &str, args: &Value) -> Result<ToolOutcome, String> {
     }
 
     let original = std::fs::read_to_string(&path).map_err(|e| format!("读取失败：{e}"))?;
-    let count = original.matches(old_text).count();
-    if count == 0 {
-        return Ok(ToolOutcome::fail(format!(
-            "在 {} 里没找到要替换的内容。请先用 read_file 确认原文（注意缩进和空格要完全一致）",
-            pretty(&path)
-        )));
-    }
-    if count > 1 {
-        return Ok(ToolOutcome::fail(format!(
-            "这段内容在文件里出现了 {count} 次，无法确定改哪一处。请带上更多上下文让它唯一",
-        )));
+
+    // 精确匹配不成时做两级容错：CRLF 差异、行尾空格差异
+    let mut needle = old_text.to_string();
+    let mut exact = original.matches(needle.as_str()).count();
+    if exact == 0 && original.contains("\r\n") && !needle.contains("\r\n") {
+        let crlf = old_text.replace('\n', "\r\n");
+        if original.matches(crlf.as_str()).count() == 1 {
+            needle = crlf;
+            exact = 1;
+        }
     }
 
-    let start_byte = original.find(old_text).unwrap_or(0);
-    let start_line = original[..start_byte].lines().count() + 1;
+    let (updated, start_line, how) = if exact == 1 {
+        let start_byte = original.find(needle.as_str()).unwrap_or(0);
+        let start_line = original[..start_byte].lines().count() + 1;
+        (original.replacen(needle.as_str(), new_text, 1), start_line, "精确匹配")
+    } else {
+        // 按行比对（忽略行尾空格 / 换行符差异），缩进本身仍需一致
+        let hits = find_by_lines(&original, old_text);
+        match hits.as_slice() {
+            [] => {
+                let hint = suggest_lines(&original, old_text);
+                return Ok(ToolOutcome::fail(format!(
+                    "在 {} 里没找到要替换的内容（已容忍行尾空格和换行符差异）。{}请先用 read_file 确认原文",
+                    pretty(&path),
+                    hint
+                )));
+            }
+            [(start, end)] => {
+                let lines: Vec<&str> = original.lines().collect();
+                let mut merged: Vec<String> = Vec::new();
+                for line in &lines[..*start] {
+                    merged.push((*line).to_string());
+                }
+                for line in new_text.lines() {
+                    merged.push(line.to_string());
+                }
+                for line in &lines[*end..] {
+                    merged.push((*line).to_string());
+                }
+                let mut out = merged.join(if original.contains("\r\n") { "\r\n" } else { "\n" });
+                if original.ends_with('\n') {
+                    out.push_str(if original.contains("\r\n") { "\r\n" } else { "\n" });
+                }
+                (out, start + 1, "按行匹配（忽略行尾空格）")
+            }
+            many => {
+                let where_hint = many
+                    .iter()
+                    .take(5)
+                    .map(|(a, _)| format!("第 {} 行", a + 1))
+                    .collect::<Vec<_>>()
+                    .join("、");
+                return Ok(ToolOutcome::fail(format!(
+                    "这段内容在 {} 里出现了 {} 次（{}），无法确定改哪一处。请带上更多上下文让它唯一",
+                    pretty(&path),
+                    many.len(),
+                    where_hint
+                )));
+            }
+        }
+    };
+
     let removed = old_text.lines().count();
     let added = new_text.lines().count();
-
-    let updated = original.replacen(old_text, new_text, 1);
     let root_canon = root_of(root)?;
     if let Some(record) = snapshot(&root_canon, &path) {
         record_change(&root_canon, &record);
@@ -552,12 +598,67 @@ fn tool_edit_file(root: &str, args: &Value) -> Result<ToolOutcome, String> {
     std::fs::write(&path, updated.as_bytes()).map_err(|e| format!("写入失败：{e}"))?;
 
     Ok(ToolOutcome::ok(format!(
-        "已修改 {}（第 {} 行起，删除 {} 行、新增 {} 行）。可用 undo_last 撤销",
+        "已修改 {}（第 {} 行起，{}，删除 {} 行、新增 {} 行）。可用 undo_last 撤销",
         pretty(&path),
         start_line,
+        how,
         removed,
         added
     )))
+}
+
+
+/// 按行匹配（忽略每行尾部空格），返回所有匹配的行区间
+fn find_by_lines(original: &str, old: &str) -> Vec<(usize, usize)> {
+    let file_lines: Vec<&str> = original.lines().collect();
+    let want: Vec<String> = old.lines().map(|l| l.trim_end().to_string()).collect();
+    let mut hits = Vec::new();
+    if want.is_empty() || want.len() > file_lines.len() {
+        return hits;
+    }
+    let mut i = 0;
+    while i + want.len() <= file_lines.len() {
+        let mut matched = true;
+        for (j, line) in want.iter().enumerate() {
+            if file_lines[i + j].trim_end() != line.as_str() {
+                matched = false;
+                break;
+            }
+        }
+        if matched {
+            hits.push((i, i + want.len()));
+            i += want.len();
+        } else {
+            i += 1;
+        }
+    }
+    hits
+}
+
+/// 找不到时给点线索：old_text 的首行在文件里出现在哪几行
+fn suggest_lines(original: &str, old: &str) -> String {
+    let first = match old.lines().find(|l| !l.trim().is_empty()) {
+        Some(line) => line.trim(),
+        None => return String::new(),
+    };
+    let key: String = first.chars().take(40).collect();
+    let file_lines: Vec<&str> = original.lines().collect();
+    let hits: Vec<usize> = file_lines
+        .iter()
+        .enumerate()
+        .filter(|(_, line)| line.contains(&key))
+        .map(|(i, _)| i + 1)
+        .take(3)
+        .collect();
+    if hits.is_empty() {
+        return String::new();
+    }
+    let positions = hits
+        .iter()
+        .map(|n| format!("第 {n} 行"))
+        .collect::<Vec<_>>()
+        .join("、");
+    format!("（old_text 首行在文件里出现在 {positions}，看看是不是缩进或空格不一致）")
 }
 
 /// 自己实现的目录遍历，跳过依赖和构建产物
@@ -1133,6 +1234,93 @@ fn parse_skill_file(path: &Path, source: &str, fallback_name: &str) -> Option<Sk
         description,
         source: source.to_string(),
     })
+}
+
+
+/// 给 system prompt 用的项目结构摘要：目录树 + 关键文件行数。
+/// 只扫源码，跳过依赖/构建产物，控制在 2k 字符以内。
+#[tauri::command]
+pub async fn repo_map(root: String) -> Option<String> {
+    let base = root_of(&root).ok()?;
+    if !base.is_dir() {
+        return None;
+    }
+    let files = walk_files(&base, 400);
+    if files.is_empty() {
+        return None;
+    }
+
+    let mut by_dir: std::collections::BTreeMap<String, Vec<(String, usize)>> =
+        std::collections::BTreeMap::new();
+    for file in files {
+        let Ok(meta) = std::fs::metadata(&file) else {
+            continue;
+        };
+        if meta.len() > 512 * 1024 {
+            continue;
+        }
+        let Ok(text) = std::fs::read_to_string(&file) else {
+            continue;
+        };
+        let lines = text.lines().count();
+        let rel = file
+            .strip_prefix(&base)
+            .unwrap_or(&file)
+            .to_string_lossy()
+            .replace('\\', "/");
+        let (dir, name) = match rel.rsplit_once('/') {
+            Some((d, n)) => (d.to_string(), n.to_string()),
+            None => ("(根目录)".to_string(), rel),
+        };
+        by_dir.entry(dir).or_default().push((name, lines));
+    }
+    if by_dir.is_empty() {
+        return None;
+    }
+
+    let mut out = String::new();
+    out.push_str("项目结构（自动扫描，行数供参考，不必逐个打开）：\n");
+    for (dir, mut entries) in by_dir.into_iter() {
+        entries.sort_by(|a, b| b.1.cmp(&a.1));
+        let total: usize = entries.iter().map(|(_, n)| *n).sum();
+        out.push_str(&format!("{dir}/  （{} 个文件，共 {} 行）\n", entries.len(), total));
+        for (name, lines) in entries.iter().take(12) {
+            out.push_str(&format!("  {name} {lines}\n"));
+        }
+        if entries.len() > 12 {
+            out.push_str(&format!("  …另有 {} 个文件\n", entries.len() - 12));
+        }
+        if out.len() > 2_400 {
+            out.push_str("…（已截断）\n");
+            break;
+        }
+    }
+    Some(out)
+}
+
+/// 探测项目的验证命令（改完代码自动跑它）
+#[tauri::command]
+pub fn verify_command(root: String) -> Option<String> {
+    let base = root_of(&root).ok()?;
+
+    // Node / 前端：优先用 package.json 里定义的 typecheck
+    let pkg = std::fs::read_to_string(base.join("package.json")).ok();
+    if let Some(pkg) = pkg {
+        if pkg.contains("\"typecheck\"") {
+            return Some("npm run typecheck".to_string());
+        }
+        if base.join("tsconfig.json").is_file() {
+            return Some("npx tsc --noEmit".to_string());
+        }
+        return Some("npm run build".to_string());
+    }
+    if base.join("Cargo.toml").is_file() {
+        return Some("cargo check --quiet".to_string());
+    }
+    if base.join("pyproject.toml").is_file() {
+        return Some("python -m compileall -q .".to_string());
+    }
+    None
 }
 
 /// 扫描用户级与项目级技能目录。项目级优先，同名时覆盖用户级。
