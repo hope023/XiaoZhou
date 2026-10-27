@@ -1,7 +1,7 @@
 {
   "name": "xiaozhou",
   "private": true,
-  "version": "0.5.0",
+  "version": "0.5.1",
   "type": "module",
   "description": "小舟 — 一个能真正操作你电脑的桌面 AI 助手",
   "scripts": {
