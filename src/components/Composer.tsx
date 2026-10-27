@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { tr, useLocale } from "../i18n";
 
 interface Props {
   value: string;
@@ -58,6 +59,7 @@ export function Composer({
   onManageModels,
   contextUsage,
 }: Props) {
+  useLocale();
   const ref = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -173,10 +175,10 @@ export function Composer({
           <div className="composer-images">
             {images.map((url, index) => (
               <div className="composer-image" key={index}>
-                <img src={url} alt={`图片 ${index + 1}`} />
+                <img src={url} alt={tr("图片 {n}", { n: index + 1 })} />
                 <button
                   className="composer-image-del"
-                  title="移除图片"
+                  title={tr("移除图片")}
                   onClick={() => onRemoveImage(index)}
                   type="button"
                 >
@@ -191,7 +193,7 @@ export function Composer({
           ref={ref}
           className="composer-input"
           rows={1}
-          placeholder="说点什么，@ 引用文件，或粘贴截图…"
+          placeholder={tr("说点什么，@ 引用文件，或粘贴截图…")}
           value={value}
           onChange={(event) => {
             onChange(event.target.value);
@@ -223,7 +225,7 @@ export function Composer({
           <div className="mention-pop">
             {mention.items.length === 0 ? (
               <div className="mention-empty">
-                {workspace ? "没有匹配的文件" : "先设置工作目录才能引用文件"}
+                {workspace ? tr("没有匹配的文件") : tr("先设置工作目录才能引用文件")}
               </div>
             ) : (
               mention.items.slice(0, 8).map((path, index) => (
@@ -252,7 +254,7 @@ export function Composer({
               <button
                 className="chip model-chip"
                 onClick={() => setModelMenu((v) => !v)}
-                title={`${model}（点击切换模型）`}
+                title={tr("{model}（点击切换模型）", { model })}
                 type="button"
               >
                 <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
@@ -265,15 +267,15 @@ export function Composer({
                   />
                   <path d="M8 8l5-2.9M8 8v6M8 8L3 5.1" stroke="currentColor" strokeWidth="1.1" fill="none" />
                 </svg>
-                <span className="chip-text">{model || "未配置模型"}</span>
+                <span className="chip-text">{model || tr("未配置模型")}</span>
               </button>
 
               {modelMenu && (
                 <div className="model-menu">
-                  <div className="model-menu-title">切换模型</div>
+                  <div className="model-menu-title">{tr("切换模型")}</div>
                   {models.length === 0 && (
                     <div className="mention-empty">
-                      还没有常用模型，点「管理模型」把常用的加进去
+                      {tr("还没有常用模型，点「管理模型」把常用的加进去")}
                     </div>
                   )}
                   {models.map((item) => (
@@ -287,7 +289,7 @@ export function Composer({
                       type="button"
                     >
                       <span className="model-menu-name">{item}</span>
-                      {item === model && <span className="model-check">✓ 当前</span>}
+                      {item === model && <span className="model-check">{tr("✓ 当前")}</span>}
                     </button>
                   ))}
                   <button
@@ -298,7 +300,7 @@ export function Composer({
                     }}
                     type="button"
                   >
-                    管理模型…
+                    {tr("管理模型…")}
                   </button>
                 </div>
               )}
@@ -319,7 +321,7 @@ export function Composer({
               className="icon-btn"
               onClick={() => fileRef.current?.click()}
               disabled={streaming}
-              title="插入图片（也可以直接粘贴截图）"
+              title={tr("插入图片（也可以直接粘贴截图）")}
               type="button"
             >
               <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
@@ -330,13 +332,13 @@ export function Composer({
             </button>
 
             {streaming ? (
-              <button className="send-btn stop" onClick={onStop} title="停止">
+              <button className="send-btn stop" onClick={onStop} title={tr("停止")}>
                 <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
                   <rect x="3.6" y="3.6" width="8.8" height="8.8" rx="1.6" fill="currentColor" />
                 </svg>
               </button>
             ) : (
-              <button className="send-btn" onClick={onSubmit} disabled={!canSend} title="发送 (Enter)">
+              <button className="send-btn" onClick={onSubmit} disabled={!canSend} title={tr("发送 (Enter)")}>
                 <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
                   <path
                     d="M8 12.6V3.6M8 3.6L3.9 7.7M8 3.6l4.1 4.1"
@@ -354,9 +356,9 @@ export function Composer({
       </div>
 
       <div className="composer-hint">
-        <span>Enter 发送 · Shift + Enter 换行 · @ 引用文件 · 粘贴截图</span>
+        <span>{tr("Enter 发送 · Shift + Enter 换行 · @ 引用文件 · 粘贴截图")}</span>
         {contextUsage && (
-          <span className="composer-usage" title="当前会话的上下文用量 / 预算，快到预算时早期对话会被摘要压缩">
+          <span className="composer-usage" title={tr("当前会话的上下文用量 / 预算，快到预算时早期对话会被摘要压缩")}>
             {contextUsage}
           </span>
         )}

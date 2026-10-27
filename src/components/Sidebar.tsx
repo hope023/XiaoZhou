@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Session } from "../types";
+import { tr, useLocale } from "../i18n";
 
 /** 会话项 hover 出现的操作按钮 */
 function SessionOps({
@@ -19,7 +20,7 @@ function SessionOps({
     <span className="session-ops">
       <button
         className={`session-op ${pinned ? "on" : ""}`}
-        title={pinned ? "取消置顶" : "置顶"}
+        title={pinned ? tr("取消置顶") : tr("置顶")}
         onClick={(event) => {
           event.stopPropagation();
           onPin();
@@ -37,7 +38,7 @@ function SessionOps({
       </button>
       <button
         className="session-op"
-        title="重命名"
+        title={tr("重命名")}
         onClick={(event) => {
           event.stopPropagation();
           onRename();
@@ -55,7 +56,7 @@ function SessionOps({
       </button>
       <button
         className="session-op"
-        title="导出为 Markdown"
+        title={tr("导出为 Markdown")}
         onClick={(event) => {
           event.stopPropagation();
           onExport();
@@ -74,7 +75,7 @@ function SessionOps({
       </button>
       <button
         className="session-op danger"
-        title="删除对话"
+        title={tr("删除对话")}
         onClick={(event) => {
           event.stopPropagation();
           onDelete();
@@ -127,6 +128,7 @@ export function Sidebar({
   onOpenSettings,
   onOpenSchedules,
 }: Props) {
+  useLocale();
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -192,15 +194,15 @@ export function Sidebar({
         <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
           <path d="M8 3.4v9.2M3.4 8h9.2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
         </svg>
-        新建对话
+        {tr("新建对话")}
       </button>
 
-      <button className="new-chat schedule-entry" onClick={onOpenSchedules} title="定时任务">
+      <button className="new-chat schedule-entry" onClick={onOpenSchedules} title={tr("定时任务")}>
         <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
           <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.3" fill="none" />
           <path d="M8 4.6V8l2.4 1.6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" fill="none" />
         </svg>
-        定时任务
+        {tr("定时任务")}
       </button>
 
       <div className="session-search">
@@ -211,18 +213,18 @@ export function Sidebar({
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="搜索对话…"
+          placeholder={tr("搜索对话…")}
           spellCheck={false}
         />
         {query && (
-          <button className="session-search-clear" onClick={() => setQuery("")} title="清空">
+          <button className="session-search-clear" onClick={() => setQuery("")} title={tr("清空")}>
             ×
           </button>
         )}
       </div>
 
       <div className="session-list">
-        {groups.length === 0 && needle && <div className="session-empty">没有匹配「{query}」的对话</div>}
+        {groups.length === 0 && needle && <div className="session-empty">{tr("没有匹配「{query}」的对话", { query })}</div>}
         {groups.map((group) => {
           const isCollapsed = collapsed.has(group.key);
           return (
@@ -230,7 +232,7 @@ export function Sidebar({
               <button
                 className="dir-group-head"
                 onClick={() => toggle(group.key)}
-                title={group.dir || "未设置目录"}
+                title={group.dir || tr("未设置目录")}
                 type="button"
               >
                 <svg
@@ -259,7 +261,7 @@ export function Sidebar({
                   />
                 </svg>
                 <span className="dir-group-name">
-                  {group.dir ? baseName(group.dir) : "未设置目录"}
+                  {group.dir ? baseName(group.dir) : tr("未设置目录")}
                 </span>
                 <span className="dir-group-count">{group.items.length}</span>
               </button>
@@ -271,7 +273,7 @@ export function Sidebar({
                     className={`session-item ${session.id === activeId ? "active" : ""}`}
                     onClick={() => onSelect(session.id)}
                   >
-                    {streamingIds?.has(session.id) && <span className="session-live" title="执行中" />}
+                    {streamingIds?.has(session.id) && <span className="session-live" title={tr("执行中")} />}
                     {renamingId === session.id ? (
                       <input
                         className="session-rename"
@@ -315,7 +317,7 @@ export function Sidebar({
       </div>
 
       <div className="sidebar-foot">
-        <button className="settings-bar" onClick={onOpenSettings} title="设置 (Ctrl+,)">
+        <button className="settings-bar" onClick={onOpenSettings} title={tr("设置 (Ctrl+,)")}>
           <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
             <circle cx="8" cy="8" r="2.1" stroke="currentColor" strokeWidth="1.1" fill="none" />
             <path
@@ -325,7 +327,7 @@ export function Sidebar({
               strokeLinecap="round"
             />
           </svg>
-          <span>设置</span>
+          <span>{tr("设置")}</span>
         </button>
       </div>
     </aside>

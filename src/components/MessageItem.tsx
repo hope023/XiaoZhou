@@ -3,6 +3,7 @@ import logo from "../assets/logo.png";
 import type { ChatMessage, MessagePart, ToolResult } from "../types";
 import { Markdown } from "../Markdown";
 import { ToolGroup } from "./ToolCard";
+import { tr, useLocale } from "../i18n";
 
 /** 把 <think>…</think>（或流式未闭合的 <think>…）从正文里切出来 */
 function parseThinking(
@@ -58,7 +59,7 @@ function ThinkingBlock({
           <path d="M6.2 14.2h3.6" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
         </svg>
         <span className="think-label">
-          {streaming && !open ? "思考中…" : (defaultLabel ?? "思考过程")}
+          {streaming && !open ? tr("思考中…") : (defaultLabel ?? tr("思考过程"))}
         </span>
         <svg
           className={`think-chevron ${open ? "open" : ""}`}
@@ -85,7 +86,8 @@ function fmt(n?: number): string {
 /** 思考块标题：带上字数，长思考一眼看得出体量 */
 function thinkLabel(text: string): string {
   const len = text.trim().length;
-  return len >= 1000 ? `思考过程 · ${(len / 1000).toFixed(1)}k 字` : `思考过程 · ${len} 字`;
+  const size = len >= 1000 ? `${(len / 1000).toFixed(1)}k` : String(len);
+  return tr("思考过程 · {n} 字", { n: size });
 }
 
 type RenderNode =
@@ -147,6 +149,7 @@ interface Props {
 }
 
 export function MessageItem({ message, streaming, onUndo, onRetry, onEdit, onBranch }: Props) {
+  useLocale();
   const isUser = message.role === "user";
   const results = message.toolResults ?? [];
   const [copied, setCopied] = useState(false);
@@ -209,12 +212,12 @@ export function MessageItem({ message, streaming, onUndo, onRetry, onEdit, onBra
             <div className="msg-actions">
               {onBranch && (
                 <button className="msg-action" onClick={onBranch} type="button">
-                  分叉
+                  {tr("分叉")}
                 </button>
               )}
               {onEdit && (
                 <button className="msg-action" onClick={onEdit} type="button">
-                  编辑
+                  {tr("编辑")}
                 </button>
               )}
             </div>
@@ -263,7 +266,11 @@ export function MessageItem({ message, streaming, onUndo, onRetry, onEdit, onBra
 
         {!streaming && message.usage && (message.usage.total ?? 0) > 0 && (
           <div className="msg-usage" title="本次请求消耗的 token">
-            ↑{fmt(message.usage.prompt)} ↓{fmt(message.usage.completion)} · 共 {fmt(message.usage.total)} tokens
+            {tr("↑{a} ↓{b} · 共 {c} tokens", {
+              a: fmt(message.usage.prompt),
+              b: fmt(message.usage.completion),
+              c: fmt(message.usage.total),
+            })}
           </div>
         )}
 
@@ -271,12 +278,12 @@ export function MessageItem({ message, streaming, onUndo, onRetry, onEdit, onBra
           <div className="msg-actions">
             {message.content.trim() && (
               <button className="msg-action" onClick={copyAll} type="button">
-                {copied ? "已复制" : "复制"}
+                {copied ? tr("已复制") : tr("复制")}
               </button>
             )}
             {onRetry && (
               <button className="msg-action" onClick={onRetry} type="button">
-                重新生成
+                {tr("重新生成")}
               </button>
             )}
           </div>

@@ -19,6 +19,7 @@ export const DEFAULT_SETTINGS: Settings = {
   toggleShortcut: "alt+space",
   fontSize: 15,
   fontFamily: "default",
+  language: "zh-CN",
 };
 
 export function newId(): string {
@@ -104,6 +105,15 @@ export function loadSettings(): Settings {
   // 24000 是旧版默认上下文预算，读代码类任务太容易触发压缩；同样跟着升
   if (!("contextBudget" in raw) || raw.contextBudget === 24000) {
     merged.contextBudget = DEFAULT_SETTINGS.contextBudget;
+  }
+  // 首次运行跟随系统语言：繁体地区用繁體中文，其它中文用简体，非中文系统用英文
+  if (!("language" in raw)) {
+    const nav = (typeof navigator !== "undefined" ? navigator.language : "zh-CN").toLowerCase();
+    merged.language = /tw|hk|mo/.test(nav)
+      ? "zh-TW"
+      : nav.startsWith("zh")
+        ? "zh-CN"
+        : "en";
   }
   // 老数据没有常用模型列表：把当前模型放进去，保证切换菜单非空
   if (!Array.isArray(merged.modelList)) {

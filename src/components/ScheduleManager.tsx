@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { nextRunOf } from "../store";
 import type { Schedule } from "../types";
+import { tr, useLocale } from "../i18n";
 
 interface Props {
   schedules: Schedule[];
@@ -13,7 +14,9 @@ interface Props {
 function describe(schedule: Schedule): string {
   if (schedule.schedule.kind === "interval") {
     const minutes = schedule.schedule.minutes;
-    return minutes % 60 === 0 ? `每 ${minutes / 60} 小时` : `每 ${minutes} 分钟`;
+    return minutes % 60 === 0
+    ? tr("每 {n} 小时", { n: minutes / 60 })
+    : tr("每 {n} 分钟", { n: minutes });
   }
   return `每天 ${schedule.schedule.time}`;
 }
@@ -21,17 +24,18 @@ function describe(schedule: Schedule): string {
 function fmtNext(ts?: number): string {
   if (!ts) return "—";
   const diff = ts - Date.now();
-  if (diff <= 0) return "即将执行";
+  if (diff <= 0) return tr("即将执行");
   const minutes = Math.round(diff / 60_000);
-  if (minutes < 60) return `${Math.max(1, minutes)} 分钟后`;
+  if (minutes < 60) return tr("{n} 分钟后", { n: Math.max(1, minutes) });
   const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours} 小时后`;
+  if (hours < 24) return tr("{n} 小时后", { n: hours });
   return `${Math.round(hours / 24)} 天后`;
 }
 
 const MODE_LABEL: Record<string, string> = { readonly: "只读", standard: "标准", yolo: "放开" };
 
 export function ScheduleManager({ schedules, defaultWorkspace, onChange, onOpenRun }: Props) {
+  useLocale();
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
   const [prompt, setPrompt] = useState("");
@@ -87,9 +91,9 @@ export function ScheduleManager({ schedules, defaultWorkspace, onChange, onOpenR
   return (
     <div className="field schedule-block">
       <label>
-        定时任务
+        {tr("定时任务")}
         <button className="schedule-add" onClick={() => setAdding((v) => !v)} type="button">
-          {adding ? "收起" : "＋ 新建"}
+          {adding ? tr("收起") : tr("＋ 新建")}
         </button>
       </label>
 
@@ -98,55 +102,55 @@ export function ScheduleManager({ schedules, defaultWorkspace, onChange, onOpenR
           <input
             value={name}
             onChange={(event) => setName(event.target.value)}
-            placeholder="任务名，如「检查构建」"
+            placeholder={tr("任务名，如「检查构建」")}
           />
           <textarea
             value={prompt}
             onChange={(event) => setPrompt(event.target.value)}
-            placeholder="要执行什么，如「看看 dist 目录有没有今天的新构建，有就列出来」"
+            placeholder={tr("要执行什么，如「看看 dist 目录有没有今天的新构建，有就列出来」")}
             rows={3}
           />
           <div className="schedule-row">
             <select value={kind} onChange={(event) => setKind(event.target.value as "interval" | "daily")}>
-              <option value="interval">固定间隔</option>
-              <option value="daily">每天定时</option>
+              <option value="interval">{tr("固定间隔")}</option>
+              <option value="daily">{tr("每天定时")}</option>
             </select>
             {kind === "interval" ? (
               <span className="schedule-inline">
-                每 <input type="number" min={5} max={10080} value={minutes} onChange={(e) => setMinutes(Number(e.target.value) || 60)} /> 分钟
+                {tr("每")} <input type="number" min={5} max={10080} value={minutes} onChange={(e) => setMinutes(Number(e.target.value) || 60)} /> {tr("分钟")}
               </span>
             ) : (
               <span className="schedule-inline">
-                每天 <input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+                {tr("每天")} <input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
               </span>
             )}
           </div>
           <div className="schedule-row">
             <select value={mode} onChange={(event) => setMode(event.target.value as "readonly" | "standard" | "yolo")}>
-              <option value="readonly">只读模式</option>
-              <option value="standard">标准模式</option>
-              <option value="yolo">放开模式</option>
+              <option value="readonly">{tr("只读模式")}</option>
+              <option value="standard">{tr("标准模式")}</option>
+              <option value="yolo">{tr("放开模式")}</option>
             </select>
             <input
               className="schedule-ws"
               value={workspace}
               onChange={(event) => setWorkspace(event.target.value)}
-              placeholder={`工作目录（默认 ${defaultWorkspace || "未设置"}）`}
+              placeholder={tr("工作目录（默认 {dir}）", { dir: defaultWorkspace || tr("未设置") })}
               spellCheck={false}
             />
           </div>
           <div className="schedule-row">
             <button className="ghost-btn" onClick={create} disabled={!name.trim() || !prompt.trim()}>
-              创建
+              {tr("创建")}
             </button>
-            <span className="field-hint">任务只在应用开着时执行；关闭应用即暂停</span>
+            <span className="field-hint">{tr("任务只在应用开着时执行；关闭应用即暂停")}</span>
           </div>
         </div>
       )}
 
       <div className="schedule-list">
         {schedules.length === 0 && (
-          <span className="field-hint">还没有定时任务。创建后，到点时小舟会自己开一个对话执行，并用系统通知告诉你结果。</span>
+          <span className="field-hint">{tr("还没有定时任务。创建后，到点时小舟会自己开一个对话执行，并用系统通知告诉你结果。")}</span>
         )}
         {schedules.map((schedule) => (
           <div className="schedule-item" key={schedule.id}>
@@ -155,31 +159,31 @@ export function ScheduleManager({ schedules, defaultWorkspace, onChange, onOpenR
                 <span className={`schedule-dot ${schedule.lastStatus ?? ""}`} />
                 <span className="schedule-name">{schedule.name}</span>
                 <span className="schedule-freq">{describe(schedule)}</span>
-                <span className="schedule-mode">{MODE_LABEL[schedule.mode]}</span>
+                <span className="schedule-mode">{tr(MODE_LABEL[schedule.mode])}</span>
               </div>
               <div className="schedule-prompt" title={schedule.prompt}>
                 {schedule.prompt}
               </div>
               <div className="schedule-meta">
-                {schedule.enabled ? `下次：${fmtNext(schedule.nextRun)}` : "已停用"}
-                {schedule.lastStatus === "fail" && " · 上次失败"}
-                {schedule.lastStatus === "running" && " · 执行中…"}
+                {schedule.enabled ? tr("下次：{when}", { when: fmtNext(schedule.nextRun) }) : tr("已停用")}
+                {schedule.lastStatus === "fail" && tr(" · 上次失败")}
+                {schedule.lastStatus === "running" && tr(" · 执行中…")}
               </div>
             </div>
             <div className="schedule-ops">
               <button onClick={() => toggle(schedule.id)} type="button">
-                {schedule.enabled ? "停用" : "启用"}
+                {schedule.enabled ? tr("停用") : tr("启用")}
               </button>
               <button onClick={() => runNow(schedule.id)} disabled={schedule.lastStatus === "running"} type="button">
-                立即跑
+                {tr("立即跑")}
               </button>
               {schedule.lastRunSessionId && (
                 <button onClick={() => onOpenRun?.(schedule.lastRunSessionId!)} type="button">
-                  上次运行
+                  {tr("上次运行")}
                 </button>
               )}
               <button className="danger" onClick={() => remove(schedule.id)} type="button">
-                删除
+                {tr("删除")}
               </button>
             </div>
           </div>

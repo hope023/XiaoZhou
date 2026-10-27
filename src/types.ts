@@ -139,6 +139,8 @@ export interface Settings {
   fontSize: number;
   /** 界面字体样式：default = 系统默认；smiley = 得意黑 Smiley Sans */
   fontFamily: "default" | "smiley";
+  /** 界面语言：简体中文 / 繁体中文 / English */
+  language: "zh-CN" | "zh-TW" | "en";
 }
 
 /** 多模态内容块：文本或图片（data URL） */

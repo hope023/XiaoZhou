@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { DiffData } from "../types";
+import { tr, useLocale } from "../i18n";
 
 interface Props {
   summary: string;
@@ -12,6 +13,7 @@ interface Props {
 }
 
 export function ConfirmDialog({ summary, diff, context, onApprove, onReject }: Props) {
+  useLocale();
   const isFile = !!diff;
   const [remember, setRemember] = useState(false);
 
@@ -36,8 +38,8 @@ export function ConfirmDialog({ summary, diff, context, onApprove, onReject }: P
   return (
     <div className="settings-backdrop" onClick={onReject}>
       <div className="confirm-panel confirm-wide" onClick={(event) => event.stopPropagation()}>
-        <h3 className="confirm-title">{isFile ? "要应用这次文件改动吗？" : "要执行这条命令吗？"}</h3>
-        {context && <p className="confirm-context">来自对话「{context}」</p>}
+        <h3 className="confirm-title">{isFile ? tr("要应用这次文件改动吗？") : tr("要执行这条命令吗？")}</h3>
+        {context && <p className="confirm-context">{tr("来自对话「{name}」", { name: context })}</p>}
 
         {isFile && diff ? (
           <>
@@ -60,14 +62,14 @@ export function ConfirmDialog({ summary, diff, context, onApprove, onReject }: P
               ))}
             </div>
             {diff.truncated && (
-              <p className="confirm-hint">文件太大，只展示前后对比，没有逐行对齐。</p>
+              <p className="confirm-hint">{tr("文件太大，只展示前后对比，没有逐行对齐。")}</p>
             )}
           </>
         ) : (
           <>
             <pre className="confirm-code">{summary}</pre>
             <p className="confirm-hint">
-              它会在工作目录下以 PowerShell 运行。你可以在设置里关掉逐条确认。
+              {tr("它会在工作目录下以 PowerShell 运行。你可以在设置里关掉逐条确认。")}
             </p>
           </>
         )}
@@ -79,16 +81,16 @@ export function ConfirmDialog({ summary, diff, context, onApprove, onReject }: P
               checked={remember}
               onChange={(event) => setRemember(event.target.checked)}
             />
-            记住这条命令，以后不再询问
+            {tr("记住这条命令，以后不再询问")}
           </label>
         )}
 
         <div className="confirm-actions">
           <button className="ghost-btn wide" onClick={onReject}>
-            {isFile ? "不改" : "拒绝"}
+            {isFile ? tr("不改") : tr("拒绝")}
           </button>
           <button className="primary-btn" onClick={approve} autoFocus>
-            {isFile ? "应用" : "执行"}
+            {isFile ? tr("应用") : tr("执行")}
           </button>
         </div>
       </div>

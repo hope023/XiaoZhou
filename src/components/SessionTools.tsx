@@ -3,6 +3,7 @@ import type { CSSProperties } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { MODES, modeInfo } from "../modes";
 import type { AgentMode } from "../types";
+import { tr, useLocale } from "../i18n";
 
 interface Props {
   workspace: string;
@@ -44,6 +45,7 @@ export function SessionTools({
   onReset,
   onModeChange,
 }: Props) {
+  useLocale();
   const [modeMenu, setModeMenu] = useState(false);
   const [dirMenu, setDirMenu] = useState(false);
   const [dirError, setDirError] = useState("");
@@ -80,14 +82,14 @@ export function SessionTools({
       const selected = await open({
         directory: true,
         multiple: false,
-        title: "选择这个对话的工作目录",
+        title: tr("选择这个对话的工作目录"),
         defaultPath: workspace || undefined,
       });
       if (typeof selected === "string") onPick(selected);
     } catch (error) {
       // 不能静默失败，否则用户只看到"点了没反应"
       const message = error instanceof Error ? error.message : String(error);
-      setDirError(`打开文件夹选择框失败：${message}`);
+      setDirError(tr("打开文件夹选择框失败：{msg}", { msg: message }));
     }
   };
 
@@ -101,7 +103,7 @@ export function SessionTools({
             setDirMenuStyle(anchorAbove(chipRef.current));
             setDirMenu((v) => !v);
           }}
-          title={workspace || "选择工作目录"}
+          title={workspace || tr("选择工作目录")}
         >
           <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
             <path
@@ -112,7 +114,7 @@ export function SessionTools({
               strokeLinejoin="round"
             />
           </svg>
-          <span className="chip-text">{workspace ? baseName(workspace) : "选择目录"}</span>
+          <span className="chip-text">{workspace ? baseName(workspace) : tr("选择目录")}</span>
           <svg viewBox="0 0 12 12" width="9" height="9" aria-hidden="true" className="chip-caret">
             <path
               d="M3 4.6L6 7.6l3-3"
@@ -128,14 +130,14 @@ export function SessionTools({
         {dirMenu && (
           <div className="chip-menu" style={dirMenuStyle}>
             <div className="chip-menu-title" title={workspace}>
-              {workspace || "还没设目录"}
+              {workspace || tr("还没设目录")}
             </div>
             <button className="chip-menu-item" onClick={openDialog}>
-              选择文件夹…
+              {tr("选择文件夹…")}
             </button>
             {isCustom && (
               <button className="chip-menu-item" onClick={onReset}>
-                恢复默认目录
+                {tr("恢复默认目录")}
               </button>
             )}
           </div>
@@ -152,10 +154,10 @@ export function SessionTools({
             setModeMenuStyle(anchorAbove(modeBtnRef.current));
             setModeMenu((v) => !v);
           }}
-          title={info.desc}
+          title={tr(info.desc)}
         >
           <span className="mode-dot" />
-          <span className="chip-text">{info.label}</span>
+          <span className="chip-text">{tr(info.label)}</span>
           <svg viewBox="0 0 12 12" width="9" height="9" aria-hidden="true" className="chip-caret">
             <path
               d="M3 4.6L6 7.6l3-3"
@@ -170,7 +172,7 @@ export function SessionTools({
 
         {modeMenu && (
           <div className="mode-menu" style={modeMenuStyle}>
-            <div className="mode-menu-title">这个对话的权限</div>
+            <div className="mode-menu-title">{tr("这个对话的权限")}</div>
             {MODES.map((item) => (
               <button
                 key={item.value}
@@ -182,10 +184,10 @@ export function SessionTools({
               >
                 <span className="mode-item-head">
                   <span className={`mode-dot mode-${item.value}`} />
-                  <span>{item.label}</span>
-                  {item.value === mode && <span className="mode-check">当前</span>}
+                  <span>{tr(item.label)}</span>
+                  {item.value === mode && <span className="mode-check">{tr("当前")}</span>}
                 </span>
-                <span className="mode-item-desc">{item.desc}</span>
+                <span className="mode-item-desc">{tr(item.desc)}</span>
               </button>
             ))}
           </div>

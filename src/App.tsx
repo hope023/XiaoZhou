@@ -20,6 +20,7 @@ import { SettingsPanel } from "./components/SettingsPanel";
 import { Sidebar } from "./components/Sidebar";
 import { TitleBar } from "./components/TitleBar";
 import { runAgent } from "./agent";
+import { dateLocale, setLocale, tr, useLocale } from "./i18n";
 import {
   createSession,
   deriveTitle,
@@ -97,7 +98,7 @@ function buildContextMenu(event: MouseEvent): CtxMenuItem[] {
     const tail = editable.value.length;
     items.push(
       {
-        label: "剪切",
+        label: tr("剪切"),
         shortcut: "Ctrl+X",
         disabled: !selected,
         action: () => {
@@ -106,13 +107,13 @@ function buildContextMenu(event: MouseEvent): CtxMenuItem[] {
         },
       },
       {
-        label: "复制",
+        label: tr("复制"),
         shortcut: "Ctrl+C",
         disabled: !selected,
         action: () => void writeText(selected),
       },
       {
-        label: "粘贴",
+        label: tr("粘贴"),
         shortcut: "Ctrl+V",
         action: () => {
           void readText()
@@ -125,7 +126,7 @@ function buildContextMenu(event: MouseEvent): CtxMenuItem[] {
         },
       },
       {
-        label: "全选",
+        label: tr("全选"),
         shortcut: "Ctrl+A",
         disabled: !editable.value,
         action: () => {
@@ -142,8 +143,8 @@ function buildContextMenu(event: MouseEvent): CtxMenuItem[] {
   const href = link?.dataset.href;
   if (href) {
     items.push(
-      { label: "在浏览器打开", action: () => void openUrl(href).catch(() => {}) },
-      { label: "复制链接地址", action: () => void writeText(href) }
+      { label: tr("在浏览器打开"), action: () => void openUrl(href).catch(() => {}) },
+      { label: tr("复制链接地址"), action: () => void writeText(href) }
     );
   }
 
@@ -152,7 +153,7 @@ function buildContextMenu(event: MouseEvent): CtxMenuItem[] {
   if (codeWrap) {
     const code = codeWrap.querySelector("code")?.textContent ?? "";
     if (code) {
-      items.push({ label: "复制代码", action: () => void writeText(code) });
+      items.push({ label: tr("复制代码"), action: () => void writeText(code) });
     }
   }
 
@@ -174,7 +175,7 @@ function buildContextMenu(event: MouseEvent): CtxMenuItem[] {
         msg.querySelector(".msg-bubble")?.textContent ??
         [...msg.querySelectorAll(".md")].map((node) => node.textContent).join("\n\n");
       if (text.trim()) {
-        items.push({ label: "复制消息", action: () => void writeText(text) });
+        items.push({ label: tr("复制消息"), action: () => void writeText(text) });
       }
     }
   }
@@ -203,6 +204,7 @@ export default function App() {
   /** 哪些会话正在流式执行——多会话并行的基础 */
   const [streamingIds, setStreamingIds] = useState<Set<string>>(new Set());
   const [schedules, setSchedules] = useState<Schedule[]>([]);
+  useLocale();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; items: CtxMenuItem[] } | null>(
     null
@@ -298,7 +300,7 @@ export default function App() {
             )
           )
           .catch(() => {
-            void notify("没能引用这个文件", path);
+            void notify(tr("没能引用这个文件"), path);
           });
       }
     });
@@ -339,7 +341,10 @@ export default function App() {
         });
         shortcutRef.current = desired;
       } catch (error) {
-        void notify("快捷键注册失败", `${desired}：${error instanceof Error ? error.message : String(error)}`);
+        void notify(
+          tr("快捷键注册失败"),
+          `${desired}：${error instanceof Error ? error.message : String(error)}`
+        );
       }
     };
     void apply();
@@ -370,6 +375,11 @@ export default function App() {
   useEffect(() => {
     document.documentElement.classList.toggle("font-smiley", settings.fontFamily === "smiley");
   }, [settings.fontFamily]);
+
+  // 界面语言：切换后立刻重渲染所有文案
+  useEffect(() => {
+    setLocale(settings.language ?? "zh-CN");
+  }, [settings.language]);
 
   useEffect(() => {
     if (!booted || !activeId) return;
@@ -718,12 +728,15 @@ export default function App() {
       const md = [
         `# ${session.title}`,
         "",
-        `> 导出于 ${new Date().toLocaleString("zh-CN", { hour12: false })} · 工作目录 ${session.workspace || settings.workspace || "未设置"}`,
+        tr("> 导出于 {time} · 工作目录 {dir}", {
+          time: new Date().toLocaleString(dateLocale(), { hour12: false }),
+          dir: session.workspace || settings.workspace || tr("未设置"),
+        }),
         "",
         ...session.messages.map((message) =>
           message.role === "user"
-            ? `## 🧑 我\n\n${message.content}\n`
-            : `## 🤖 小舟\n\n${message.error ? `（出错：${message.error}）\n\n` : ""}${message.content || "（执行了工具调用，见下）"}\n${
+            ? `## ${tr("🧑 我")}\n\n${message.content}\n`
+            : `## ${tr("🤖 小舟")}\n\n${message.error ? tr("（出错：{msg}）", { msg: message.error }) + "\n\n" : ""}${message.content || tr("（执行了工具调用，见下）")}\n${
                 (message.toolResults ?? [])
                   .map((r) => `\n<details><summary>${r.name}：${r.args}</summary>\n\n\`\`\`\n${r.output}\n\`\`\`\n</details>`)
                   .join("\n")
@@ -738,9 +751,9 @@ export default function App() {
         });
         if (!path) return;
         await invoke("write_export", { path, content: md });
-        notify("导出完成", path);
+        notify(tr("导出完成"), path);
       } catch (error) {
-        notify("导出失败", error instanceof Error ? error.message : String(error));
+        notify(tr("导出失败"), error instanceof Error ? error.message : String(error));
       }
     },
     [sessions, settings.workspace]
@@ -803,8 +816,10 @@ export default function App() {
           )
         );
         void notify(
-          `定时任务：${schedule.name}`,
-          failed ? `执行失败：${failed.slice(0, 120)}` : "执行完成，点开「小舟」查看结果"
+          tr("定时任务：{name}", { name: schedule.name }),
+          failed
+            ? tr("执行失败：{msg}", { msg: failed.slice(0, 120) })
+            : tr("执行完成，点开「小舟」查看结果")
         );
       }
     },
@@ -918,16 +933,19 @@ export default function App() {
               {isEmpty ? (
                 <div className="empty">
                   <img className="empty-logo" src={logo} alt="" draggable={false} />
-                  <h1 className="empty-title">小舟</h1>
+                  <h1 className="empty-title">{tr("小舟")}</h1>
                   <p className="empty-sub">
-                    我能读写你的文件、跑命令。不确定从哪开始？试试下面这些。
+                    {tr("我能读写你的文件、跑命令。不确定从哪开始？试试下面这些。")}
                   </p>
                   <div className="empty-cards">
-                    {SUGGESTIONS.map((item) => (
-                      <button key={item} className="empty-card" onClick={() => send(item)}>
-                        {item}
-                      </button>
-                    ))}
+                    {SUGGESTIONS.map((item) => {
+                      const text = tr(item);
+                      return (
+                        <button key={item} className="empty-card" onClick={() => send(text)}>
+                          {text}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               ) : (

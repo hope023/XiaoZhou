@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import logo from "../assets/logo.png";
+import { tr, useLocale } from "../i18n";
 
 export function TitleBar() {
+  useLocale();
   const [maximized, setMaximized] = useState(false);
 
   useEffect(() => {
@@ -23,14 +25,14 @@ export function TitleBar() {
       <div className="titlebar-brand" data-tauri-drag-region>
         <img className="titlebar-logo" src={logo} alt="" draggable={false} />
         <span className="titlebar-title" data-tauri-drag-region>
-          小舟
+          {tr("小舟")}
         </span>
       </div>
 
       <div className="titlebar-actions">
         <button
           className="win-btn"
-          title="最小化"
+          title={tr("最小化")}
           onClick={() => win.minimize().catch(() => {})}
         >
           <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
@@ -39,7 +41,7 @@ export function TitleBar() {
         </button>
         <button
           className="win-btn"
-          title={maximized ? "还原" : "最大化"}
+          title={maximized ? tr("还原") : tr("最大化")}
           onClick={() => win.toggleMaximize().catch(() => {})}
         >
           {maximized ? (
@@ -55,7 +57,7 @@ export function TitleBar() {
         </button>
         <button
           className="win-btn win-btn-close"
-          title="关闭"
+          title={tr("关闭")}
           onClick={() => win.close().catch(() => {})}
         >
           <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">

@@ -1,4 +1,5 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
+import { tr } from "./i18n";
 
 export interface ToolOutcome {
   ok: boolean;
@@ -300,33 +301,33 @@ export const TOOL_SPECS = [
 export function toolLabel(name: string): string {
   switch (name) {
     case "list_dir":
-      return "查看目录";
+      return tr("查看目录");
     case "read_file":
-      return "读取文件";
+      return tr("读取文件");
     case "write_file":
-      return "写入文件";
+      return tr("写入文件");
     case "edit_file":
-      return "修改文件";
+      return tr("修改文件");
     case "search_text":
-      return "搜索内容";
+      return tr("搜索内容");
     case "glob":
-      return "查找文件";
+      return tr("查找文件");
     case "undo_last":
-      return "撤销改动";
+      return tr("撤销改动");
     case "run_command":
-      return "执行命令";
+      return tr("执行命令");
     case "use_skill":
-      return "调用技能";
+      return tr("调用技能");
     case "memory":
-      return "长期记忆";
+      return tr("长期记忆");
     case "todo_write":
-      return "更新清单";
+      return tr("更新清单");
     case "web_search":
-      return "联网搜索";
+      return tr("联网搜索");
     case "web_fetch":
-      return "抓取网页";
+      return tr("抓取网页");
     case "undo_changes":
-      return "批量回滚";
+      return tr("批量回滚");
     default:
       if (name.startsWith("mcp__")) {
         const [, server, tool] = name.split("__");

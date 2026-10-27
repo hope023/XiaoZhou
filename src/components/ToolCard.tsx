@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ToolResult } from "../types";
 import { cancelTool, toolLabel } from "../tools";
+import { tr, useLocale } from "../i18n";
 
 interface Props {
   result: ToolResult;
@@ -16,7 +17,7 @@ const UNITS: Record<string, [string, string]> = {
   list_dir: ["浏览", "个目录"],
   glob: ["匹配", "次"],
   search_text: ["搜索", "次"],
-  run_command: ["执行", "条命令"],
+  run_command: ["运行", "条命令"],
   edit_file: ["修改", "个文件"],
   write_file: ["写入", "个文件"],
   web_search: ["网页搜索", "次"],
@@ -38,20 +39,20 @@ function summarize(results: ToolResult[]): string {
   for (const [name, count] of counts) {
     if (name.startsWith("mcp__")) {
       const server = name.split("__")[1] ?? "mcp";
-      parts.push(`${server} ${count} 次`);
+      parts.push(`${server} ×${count}`);
       continue;
     }
     const unit = UNITS[name];
     if (unit) {
-      const [, quantifier] = unit;
-      parts.push(`${unit[0]} ${count} ${quantifier}`.trim());
+      const [verb, quantifier] = unit;
+      parts.push(quantifier ? `${tr(verb)} ${count} ${tr(quantifier)}`.trim() : `${tr(verb)} ×${count}`);
     } else {
-      parts.push(`${toolLabel(name)} ${count} 次`);
+      parts.push(`${toolLabel(name)} ×${count}`);
     }
   }
   const failed = results.filter((result) => result.status === "done" && !result.ok).length;
-  const text = parts.join("、");
-  return failed > 0 ? `${text}（${failed} 个失败）` : text;
+  const text = parts.join(tr("、"));
+  return failed > 0 ? tr("{text}（{n} 个失败）", { text, n: failed }) : text;
 }
 
 /**
@@ -67,6 +68,7 @@ export function ToolGroup({
   onUndo?: (toolCallId: string) => void;
   streaming?: boolean;
 }) {
+  useLocale();
   const running = results.filter((result) => result.status === "running");
   const failed = results.filter((result) => result.status === "done" && !result.ok);
   const [open, setOpen] = useState(false);
@@ -81,7 +83,8 @@ export function ToolGroup({
   const state = running.length > 0 ? "running" : failed.length > 0 ? "fail" : "ok";
   const live = running[0];
   const label = live
-    ? `正在${toolLabel(live.name)}${live.args && live.args !== "." ? ` · ${live.args}` : "…"}`
+    ? tr("正在{action}", { action: toolLabel(live.name) }) +
+      (live.args && live.args !== "." ? ` · ${live.args}` : "…")
     : summarize(results);
 
   return (
@@ -89,7 +92,7 @@ export function ToolGroup({
       <button className="tool-group-head" onClick={() => setOpen((v) => !v)} type="button">
         <span className="tool-dot" />
         <span className="tool-group-text">{label}</span>
-        <span className="tool-group-count">{results.length} 步</span>
+        <span className="tool-group-count">{tr("{n} 步", { n: results.length })}</span>
         <svg
           className={`tool-chevron ${open ? "open" : ""}`}
           viewBox="0 0 16 16"
@@ -129,7 +132,7 @@ export function ToolGroup({
           ))}
         </div>
       )}
-      {!open && streaming && running.length > 0 && <span className="tool-group-hint">执行中…</span>}
+      {!open && streaming && running.length > 0 && <span className="tool-group-hint">{tr("执行中…")}</span>}
     </div>
   );
 }
@@ -172,7 +175,7 @@ export function ToolCard({ result, onUndo }: Props) {
               }
             }}
           >
-            中断
+            {tr("中断")}
           </span>
         )}
         {canUndo && (
@@ -193,7 +196,7 @@ export function ToolCard({ result, onUndo }: Props) {
               }
             }}
           >
-            撤销
+            {tr("撤销")}
           </span>
         )}
         <svg
