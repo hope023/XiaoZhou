@@ -964,6 +964,7 @@ export default function App() {
                     onRetry={() => regenerate(message.id)}
                     onEdit={() => editMessage(message.id)}
                     onBranch={() => branchFrom(message.id)}
+                    collapseProcess={settings.collapseProcess}
                   />
                 ))
               )}

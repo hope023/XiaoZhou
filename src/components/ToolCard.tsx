@@ -30,7 +30,7 @@ const UNITS: Record<string, [string, string]> = {
 };
 
 /** 把一组工具调用归纳成一句人话：读取 4 个文件、执行 1 条命令 */
-function summarize(results: ToolResult[]): string {
+export function summarizeResults(results: ToolResult[]): string {
   const counts = new Map<string, number>();
   for (const result of results) {
     counts.set(result.name, (counts.get(result.name) ?? 0) + 1);
@@ -85,7 +85,7 @@ export function ToolGroup({
   const label = live
     ? tr("正在{action}", { action: toolLabel(live.name) }) +
       (live.args && live.args !== "." ? ` · ${live.args}` : "…")
-    : summarize(results);
+    : summarizeResults(results);
 
   return (
     <div className={`tool-group tool-${state}`}>

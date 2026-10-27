@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import logo from "../assets/logo.png";
 import type { ChatMessage, MessagePart, ToolResult } from "../types";
 import { Markdown } from "../Markdown";
-import { ToolGroup } from "./ToolCard";
+import { ToolGroup, summarizeResults } from "./ToolCard";
 import { tr, useLocale } from "../i18n";
 
 /** 把 <think>…</think>（或流式未闭合的 <think>…）从正文里切出来 */
@@ -146,9 +146,94 @@ interface Props {
   onEdit?: () => void;
   /** 从这条提问处分叉出新会话 */
   onBranch?: () => void;
+  /** 回答完成后把过程收进折叠块 */
+  collapseProcess?: boolean;
 }
 
-export function MessageItem({ message, streaming, onUndo, onRetry, onEdit, onBranch }: Props) {
+/** 过程 = 最后一次回答之前的所有片段：思考、工具调用、中间说明 */
+function splitNodes(nodes: RenderNode[]): { process: RenderNode[]; final: RenderNode[] } {
+  let lastText = -1;
+  for (let i = nodes.length - 1; i >= 0; i -= 1) {
+    const node = nodes[i];
+    if (node.kind === "text" && node.text.trim()) {
+      lastText = i;
+      break;
+    }
+  }
+  if (lastText <= 0) return { process: [], final: nodes };
+  return { process: nodes.slice(0, lastText), final: nodes.slice(lastText) };
+}
+
+/** 折叠后的过程条：一行摘要，点开才看细节 */
+function ProcessBlock({
+  detail,
+  steps,
+  failed,
+  children,
+}: {
+  detail: string;
+  steps: number;
+  failed: boolean;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+
+  // 有工具报错就默认摊开，别把问题藏起来
+  useEffect(() => {
+    if (failed) setOpen(true);
+  }, [failed]);
+
+  return (
+    <div className={`process-box ${failed ? "has-fail" : ""}`}>
+      <button
+        className="process-head"
+        type="button"
+        title={tr("点击展开这部分过程")}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+          <path
+            d="M3 4.2h10M3 8h10M3 11.8h6.5"
+            stroke="currentColor"
+            strokeWidth="1.3"
+            strokeLinecap="round"
+            fill="none"
+          />
+        </svg>
+        <span className="process-label">{tr("过程")}</span>
+        {detail && <span className="process-detail">{detail}</span>}
+        {steps > 0 && <span className="process-count">{tr("{n} 步", { n: steps })}</span>}
+        <svg
+          className={`process-chevron ${open ? "open" : ""}`}
+          viewBox="0 0 16 16"
+          width="11"
+          height="11"
+          aria-hidden="true"
+        >
+          <path
+            d="M6 4l4 4-4 4"
+            stroke="currentColor"
+            strokeWidth="1.3"
+            fill="none"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+      {open && <div className="process-body">{children}</div>}
+    </div>
+  );
+}
+
+export function MessageItem({
+  message,
+  streaming,
+  onUndo,
+  onRetry,
+  onEdit,
+  onBranch,
+  collapseProcess = true,
+}: Props) {
   useLocale();
   const isUser = message.role === "user";
   const results = message.toolResults ?? [];
@@ -186,6 +271,48 @@ export function MessageItem({ message, streaming, onUndo, onRetry, onEdit, onBra
     message.content.trim().length > 0 ||
     results.length > 0;
   const showDots = !!streaming && !hasVisible;
+
+  // 把整条回复切成「过程」和「最终回答」两段：只在跑完后折叠，跑的过程中照旧摊开
+  const nodes = hasParts ? buildNodes(message.parts!, streaming) : [];
+  const { process: procNodes, final: finalNodes } = splitNodes(nodes);
+  const collapse = collapseProcess && !streaming && procNodes.length > 0;
+
+  const procToolResults = procNodes
+    .flatMap((node) => (node.kind === "tools" ? node.callIds : []))
+    .map((id) => results.find((result) => result.toolCallId === id))
+    .filter((result): result is ToolResult => !!result);
+  const thinkChars = procNodes.reduce(
+    (sum, node) => (node.kind === "think" ? sum + node.text.trim().length : sum),
+    0
+  );
+  const procFailed = procToolResults.some((result) => result.status === "done" && !result.ok);
+  const procDetail = [
+    thinkChars > 0 ? tr("思考 {n} 字", { n: fmt(thinkChars) }) : "",
+    procToolResults.length > 0 ? summarizeResults(procToolResults) : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const procSteps = procToolResults.length + (thinkChars > 0 ? 1 : 0);
+
+  const renderNode = (node: RenderNode, plainThink = false) => {
+    if (node.kind === "text") return <Markdown key={node.key} text={node.text} />;
+    if (node.kind === "think") {
+      // 过程摊开时思考直接铺成淡色正文，不再套一层折叠
+      return plainThink ? (
+        <div className="process-think" key={node.key}>
+          <Markdown text={node.text} />
+        </div>
+      ) : (
+        <ThinkingBlock
+          key={node.key}
+          text={node.text}
+          streaming={node.streaming && streaming}
+          defaultLabel={thinkLabel(node.text)}
+        />
+      );
+    }
+    return renderTools(node.callIds, node.key);
+  };
 
   if (isUser) {
     return (
@@ -231,28 +358,26 @@ export function MessageItem({ message, streaming, onUndo, onRetry, onEdit, onBra
     <div className="msg msg-assistant">
       <img className="msg-avatar" src={logo} alt="" draggable={false} />
       <div className="msg-body">
-        {hasParts
-          ? buildNodes(message.parts!, streaming).map((node) =>
-              node.kind === "text" ? (
-                <Markdown key={node.key} text={node.text} />
-              ) : node.kind === "think" ? (
-                <ThinkingBlock
-                  key={node.key}
-                  text={node.text}
-                  streaming={node.streaming && streaming}
-                  defaultLabel={thinkLabel(node.text)}
-                />
-              ) : (
-                renderTools(node.callIds, node.key)
-              )
-            )
-          : [
-              message.content ? <Markdown key="legacy-text" text={message.content} /> : null,
-              renderTools(
-                results.map((result) => result.toolCallId),
-                "legacy-tools"
-              ),
-            ]}
+        {hasParts ? (
+          collapse ? (
+            <>
+              <ProcessBlock detail={procDetail} steps={procSteps} failed={procFailed}>
+                {procNodes.map((node) => renderNode(node, true))}
+              </ProcessBlock>
+              {finalNodes.map((node) => renderNode(node))}
+            </>
+          ) : (
+            nodes.map((node) => renderNode(node))
+          )
+        ) : (
+          [
+            message.content ? <Markdown key="legacy-text" text={message.content} /> : null,
+            renderTools(
+              results.map((result) => result.toolCallId),
+              "legacy-tools"
+            ),
+          ]
+        )}
 
         {showDots && (
           <div className="typing">

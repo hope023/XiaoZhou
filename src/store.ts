@@ -22,6 +22,7 @@ export const DEFAULT_SETTINGS: Settings = {
   language: "zh-CN",
   autoVerify: true,
   planFirst: true,
+  collapseProcess: true,
 };
 
 export function newId(): string {

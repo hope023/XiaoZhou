@@ -145,6 +145,8 @@ export interface Settings {
   autoVerify: boolean;
   /** 复杂任务先列 todo 计划再动手 */
   planFirst: boolean;
+  /** 回答完成后把思考与工具调用收进一个「过程」折叠块 */
+  collapseProcess: boolean;
 }
 
 /** 多模态内容块：文本或图片（data URL） */

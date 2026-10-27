@@ -2493,6 +2493,94 @@ button {
   color: var(--text-faint);
 }
 
+/* ---------------- 整段过程折叠（回答出来后） ---------------- */
+
+.process-box {
+  margin: 2px 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg-soft);
+  overflow: hidden;
+}
+
+.process-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 11px;
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 11.8px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.process-head:hover {
+  background: var(--hover);
+  color: var(--text-dim);
+}
+
+.process-label {
+  flex: none;
+  font-weight: 600;
+}
+
+.process-detail {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.9;
+}
+
+.process-count {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 5px;
+  border: 1px solid var(--line);
+  background: var(--bg-elev);
+  font-size: 10.6px;
+  color: var(--text-faint);
+}
+
+.process-chevron {
+  flex: none;
+  transition: transform 0.15s;
+  opacity: 0.6;
+}
+
+.process-chevron.open {
+  transform: rotate(90deg);
+}
+
+.process-box.has-fail .process-label {
+  color: var(--danger-text);
+}
+
+.process-body {
+  border-top: 1px dashed var(--line);
+  padding: 7px 10px 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.process-think {
+  padding: 1px 0 1px 9px;
+  border-left: 2px solid var(--line);
+  font-size: 12.2px;
+  color: var(--text-faint);
+  line-height: 1.65;
+}
+
+.process-think .md {
+  font-size: 12.2px;
+  color: var(--text-faint);
+}
+
 /* ---------------- 侧栏底部 ---------------- */
 
 .sidebar-foot {

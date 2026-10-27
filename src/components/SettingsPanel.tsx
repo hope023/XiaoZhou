@@ -394,6 +394,20 @@ export function SettingsPanel({ settings, schedules, onSchedulesChange, initialT
                     {tr("识别到项目里的 typecheck / build 命令时，改完自动跑一次并把报错喂回模型自己修，一次任务最多 3 次。它真的会执行项目脚本，不需要就关掉")}
                   </span>
                 </div>
+
+                <div className="field">
+                  <label className="switch-row">
+                    <input
+                      type="checkbox"
+                      checked={draft.collapseProcess}
+                      onChange={(event) => patch({ collapseProcess: event.target.checked })}
+                    />
+                    {tr("回答完成后折叠过程")}
+                  </label>
+                  <span className="field-hint">
+                    {tr("思考和工具调用只在执行时展开；最终回答出来后收进一条「过程」里，点一下就能重新展开。中途有工具报错时仍会自动展开")}
+                  </span>
+                </div>
               </>
             )}
 

@@ -71,6 +71,9 @@ const EN: Record<string, string> = {
   "思考中…": "Thinking…",
   "思考过程": "Reasoning",
   "思考过程 · {n} 字": "Reasoning · {n} chars",
+  "过程": "Process",
+  "思考 {n} 字": "Thought {n} chars",
+  "点击展开这部分过程": "Click to expand this process",
   "重新生成": "Regenerate",
   "↑{a} ↓{b} · 共 {c} tokens": "↑{a} ↓{b} · {c} tokens total",
 
@@ -349,6 +352,9 @@ const EN: Record<string, string> = {
   "改完文件自动跑验证（typecheck / build）": "Auto-verify after edits (typecheck / build)",
   "识别到项目里的 typecheck / build 命令时，改完自动跑一次并把报错喂回模型自己修，一次任务最多 3 次。它真的会执行项目脚本，不需要就关掉":
     "When a typecheck/build command is detected, it runs once after edits and feeds errors back to the model, up to 3 times per task. It really executes project scripts — turn this off if you don't want that.",
+  "回答完成后折叠过程": "Collapse the process once the answer is done",
+  "思考和工具调用只在执行时展开；最终回答出来后收进一条「过程」里，点一下就能重新展开。中途有工具报错时仍会自动展开":
+    "Reasoning and tool calls stay open only while running. Once the final answer lands they fold into a single Process row you can click to reopen. It still auto-expands if a tool failed.",
 
 };
 
