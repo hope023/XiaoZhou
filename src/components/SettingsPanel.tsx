@@ -326,20 +326,9 @@ export function SettingsPanel({ settings, schedules, onSchedulesChange, initialT
                     {tr("盘符根目录范围太大了，选一个具体项目文件夹吧")}
                   </span>
                 )}
-                <div className="schedule-row">
-                  <button
-                    className="ghost-btn"
-                    onClick={async () => {
-                      const dir = await invoke<string>("default_workspace").catch(() => "");
-                      if (dir) patch({ workspace: dir });
-                    }}
-                  >
-                    {tr("用默认目录（用户主目录）")}
-                  </button>
-                  <span className="field-hint">
-                    {tr("会话记录、定时任务、模型配置和用户级记忆都存在 ~/.xiaozhou，不会放进工作目录")}
-                  </span>
-                </div>
+                <span className="field-hint">
+                  {tr("会话记录、定时任务、模型配置和用户级记忆都存在 ~/.xiaozhou，不会放进工作目录")}
+                </span>
               </div>
             )}
 

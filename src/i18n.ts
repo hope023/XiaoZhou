@@ -336,15 +336,9 @@ const EN: Record<string, string> = {
     "XiaoZhou only reads, writes and runs commands inside this folder — switch folders to switch projects. It never writes here on its own: only when you ask it to change files, or when saving project-level memory/skills, does it use a .xiaozhou folder inside it.",
   "现在是盘符根目录或用户主目录，范围太大了。建议选一个具体项目文件夹，或用默认的 ~/XiaoZhou":
     "This is a drive root or your home folder — far too broad. Pick an actual project folder, or use the default ~/XiaoZhou.",
-  "用默认目录（~/XiaoZhou）": "Use default folder (~/XiaoZhou)",
   "会话记录、定时任务、模型配置和用户级记忆都存在 ~/.xiaozhou，不会放进工作目录":
     "Chat history, scheduled tasks, model config and user-level memory live in ~/.xiaozhou — not in the working folder.",
-
-
-  "用默认目录（用户主目录）": "Use default folder (home)",
   "盘符根目录范围太大了，选一个具体项目文件夹吧": "A drive root is too broad — pick an actual project folder.",
-
-
   "执行策略": "Execution",
   "复杂任务先列计划再动手": "Plan before acting on complex tasks",
   "要改代码或多步操作时，先在对话里给出 3~6 步清单再逐步执行，你随时能看到进度；简单问答不受影响":
