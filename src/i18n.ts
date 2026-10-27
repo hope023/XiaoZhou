@@ -328,6 +328,15 @@ const EN: Record<string, string> = {
   "模型与参数": "Model & sampling",
   "关于与更新": "About & updates",
 
+
+  "小舟只在这个目录里读写文件、执行命令；换项目就换目录。它不会主动往里面写东西——只有你让它改文件，或保存项目级记忆/技能时，才会用到这里面的 .xiaozhou 文件夹":
+    "XiaoZhou only reads, writes and runs commands inside this folder — switch folders to switch projects. It never writes here on its own: only when you ask it to change files, or when saving project-level memory/skills, does it use a .xiaozhou folder inside it.",
+  "现在是盘符根目录或用户主目录，范围太大了。建议选一个具体项目文件夹，或用默认的 ~/XiaoZhou":
+    "This is a drive root or your home folder — far too broad. Pick an actual project folder, or use the default ~/XiaoZhou.",
+  "用默认目录（~/XiaoZhou）": "Use default folder (~/XiaoZhou)",
+  "会话记录、定时任务、模型配置和用户级记忆都存在 %APPDATA%\\xiaozhou，不会放进工作目录":
+    "Chat history, scheduled tasks, model config and user-level memory live in %APPDATA%\\xiaozhou — not in the working folder.",
+
 };
 
 /* ---------------- 简体 → 繁体（UI 常用字词表） ---------------- */

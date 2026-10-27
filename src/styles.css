@@ -1405,27 +1405,29 @@ button {
 }
 
 .settings-nav-group + .settings-nav-group {
-  margin-top: 12px;
+  margin-top: 10px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
 }
 
+/* 分组标题要比子项更大更重，层级才看得出来 */
 .settings-nav-title {
-  font-size: 10.4px;
+  font-size: 12.8px;
   font-weight: 700;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-  padding: 4px 9px 5px;
+  color: var(--text);
+  letter-spacing: 0.01em;
+  padding: 7px 9px 6px;
 }
 
 .settings-nav-item {
   display: block;
   width: 100%;
   text-align: left;
-  padding: 6px 10px;
+  padding: 5px 10px 5px 18px;
   border: none;
   background: transparent;
   border-radius: 7px;
-  font-size: 12.6px;
+  font-size: 12.2px;
   color: var(--text-dim);
   transition: background 0.12s, color 0.12s;
 }

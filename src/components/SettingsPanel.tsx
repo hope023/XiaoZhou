@@ -178,6 +178,11 @@ export function SettingsPanel({ settings, schedules, onSchedulesChange, initialT
     }
   };
 
+  // 主目录 / 盘符根目录当工作目录范围过大，提示用户换具体项目
+  const workspaceTrimmed = draft.workspace.trim();
+  const wideRoot =
+    /^[a-z]:\\?(\\)?$/i.test(workspaceTrimmed) || /^[a-z]:\\(users|documents and settings)\\[^\\]+\\?$/i.test(workspaceTrimmed);
+
   const currentLabel =
     NAV.flatMap((group) => group.items).find((item) => item.key === section)?.label ?? "";
 
@@ -312,9 +317,28 @@ export function SettingsPanel({ settings, schedules, onSchedulesChange, initialT
                   </span>
                 ) : (
                   <span className="field-hint">
-                    {tr("新建对话默认用这个目录。已经开着的对话可以在对话顶部的目录栏单独切换，互不影响")}
+                    {tr("小舟只在这个目录里读写文件、执行命令；换项目就换目录。它不会主动往里面写东西——只有你让它改文件，或保存项目级记忆/技能时，才会用到这里面的 .xiaozhou 文件夹")}
                   </span>
                 )}
+                {wideRoot && (
+                  <span className="field-hint warn">
+                    {tr("现在是盘符根目录或用户主目录，范围太大了。建议选一个具体项目文件夹，或用默认的 ~/XiaoZhou")}
+                  </span>
+                )}
+                <div className="schedule-row">
+                  <button
+                    className="ghost-btn"
+                    onClick={async () => {
+                      const dir = await invoke<string>("default_workspace").catch(() => "");
+                      if (dir) patch({ workspace: dir });
+                    }}
+                  >
+                    {tr("用默认目录（~/XiaoZhou）")}
+                  </button>
+                  <span className="field-hint">
+                    {tr("会话记录、定时任务、模型配置和用户级记忆都存在 %APPDATA%\\xiaozhou，不会放进工作目录")}
+                  </span>
+                </div>
               </div>
             )}
 

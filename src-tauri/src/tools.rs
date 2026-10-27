@@ -103,9 +103,13 @@ pub fn home_dir() -> String {
         .unwrap_or_else(|_| "C:\\".to_string())
 }
 
+/// 默认工作目录：用户主目录下的 XiaoZhou 文件夹（首次用自动建好）。
+/// 直接拿整个主目录当沙盒太宽，容易误伤；单独一个文件夹更清楚。
 #[tauri::command]
 pub fn default_workspace() -> String {
-    home_dir()
+    let dir = PathBuf::from(home_dir()).join("XiaoZhou");
+    let _ = std::fs::create_dir_all(&dir);
+    dir.to_string_lossy().to_string()
 }
 
 /// 设置页用它判断用户填的目录是否有效
@@ -1142,6 +1146,8 @@ fn scan_skills(root: &str) -> Result<Vec<SkillInfo>, String> {
     dirs.push((app_data_dir().join("skills"), "user"));
     if let Ok(root_canon) = root_of(root) {
         dirs.push((root_canon.join(STATE_DIR).join("skills"), "project"));
+        // 兼容其他 agent 的约定：项目里的 .claude/skills 也认
+        dirs.push((root_canon.join(".claude").join("skills"), "project"));
     }
 
     for (dir, source) in dirs {
